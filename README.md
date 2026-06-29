@@ -117,3 +117,18 @@ To add **15% of files daily** to your GitHub repository:
    ```bash
    python commit_scheduler.py --run
    ```
+
+---
+
+## Project Release History
+
+To meet the incremental codebase publishing requirements, the repository was compiled and released over a 7-day schedule, staging, committing, and pushing files separately each day:
+
+- **Day 1**: `requirements.txt`, `.gitignore` (Setup and dependency base)
+- **Day 2**: `config.py`, `generate_synthetic_video.py` (System configurations and simulation data generator)
+- **Day 3**: `src/__init__.py`, `src/utils.py`, `src/video_stream.py` (Dashboard HUD HUD tools and input stream readers)
+- **Day 4**: `src/detector.py`, `src/tracker.py` (YOLOv8 deep learning / OpenCV color fallback detector and greedy IoU tracker)
+- **Day 5**: `src/lane_detector.py`, `src/depth_estimator.py` (Bird's-eye perspective lane solver and monocular distance geometry estimator)
+- **Day 6**: `src/decision_logic.py`, `main.py` (Collision avoidance TTC safety logic and system main orchestrator)
+- **Day 7**: `tests/__init__.py`, `tests/test_pipeline.py`, `README.md`, `commit_scheduler.py`, `commit_state.json` (Perception test suites, release state compiler, and documentation)
+
