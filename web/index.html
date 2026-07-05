@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous Perception Web HUD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- Layout Wrapper (matches the standard structure of aalind.org) -->
+    <div class="layout">
+        
+        <!-- Left Sidebar Controls -->
+        <aside class="sidebar">
+            <div class="sidebar-card border-glow-card">
+                <span class="edge-light"></span>
+                <div class="border-glow-inner">
+                    <div class="hud-logo">🚗</div>
+                    <h1 class="sidebar-name">Perception HUD</h1>
+                    <p class="sidebar-title">Autonomous Control</p>
+                    
+                    <div class="sidebar-divider"></div>
+                    
+                    <!-- System Status -->
+                    <div class="control-group">
+                        <span class="control-label">SYSTEM STATE</span>
+                        <div id="status-badge" class="badge badge-inactive">STOPPED</div>
+                    </div>
+                    
+                    <div class="sidebar-divider"></div>
+                    
+                    <!-- Stream Controls -->
+                    <div class="control-group">
+                        <label for="source-select" class="control-label">VIDEO SOURCE</label>
+                        <select id="source-select" class="form-select">
+                            <option value="synthetic">Synthetic Simulator</option>
+                            <option value="webcam">Hardware Webcam (0)</option>
+                            <option value="custom">Custom File / Stream</option>
+                        </select>
+                    </div>
+
+                    <div id="custom-source-group" class="control-group hidden">
+                        <label for="custom-source-path" class="control-label">CUSTOM PATH</label>
+                        <input type="text" id="custom-source-path" class="form-input" placeholder="e.g. data/my_video.mp4">
+                    </div>
+
+                    <div class="control-group">
+                        <label class="toggle-container">
+                            <input type="checkbox" id="depth-toggle">
+                            <span class="toggle-slider"></span>
+                            <span class="control-label toggle-label">MiDaS DEPTH MAP</span>
+                        </label>
+                    </div>
+                    
+                    <div class="sidebar-divider"></div>
+                    
+                    <!-- Action Buttons -->
+                    <button id="btn-toggle-stream" class="btn btn-primary">START RUN</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Main Content Panel -->
+        <main class="main-content">
+            
+            <!-- Header section with background title text -->
+            <section class="section hero">
+                <div class="section-bg-title">AUTONOMOUS</div>
+                <h2 class="section-title">PERCEPTION RADAR HUD</h2>
+                <p class="hero-description">
+                    Real-time vehicle vision telemetry combining YOLOv8 target classifiers, 
+                    monocular depth mapping solvers, and sliding window quadratic lane trackers.
+                </p>
+            </section>
+
+            <!-- Grid Layout for Live HUD Video and Telemetry -->
+            <div class="dashboard-grid">
+                
+                <!-- Main HUD Feed Monitor -->
+                <div class="hud-monitor border-glow-card">
+                    <span class="edge-light"></span>
+                    <div class="border-glow-inner">
+                        <div class="card-header">
+                            <span class="card-header-dot dot-live"></span>
+                            <h3>LIVE VIDEO HUD FEED</h3>
+                        </div>
+                        <div class="video-container">
+                            <img id="hud-stream-img" src="" alt="Perception stream inactive - click Start Run" class="video-feed">
+                            <div id="video-placeholder" class="video-placeholder-overlay">
+                                <span>PIPELINE OFFLINE</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2D Top-Down Radar mapping -->
+                <div class="radar-card border-glow-card">
+                    <span class="edge-light"></span>
+                    <div class="border-glow-inner">
+                        <div class="card-header">
+                            <span class="card-header-dot"></span>
+                            <h3>TOP-DOWN RADAR (METERS)</h3>
+                        </div>
+                        <div class="radar-container">
+                            <canvas id="radar-canvas" width="400" height="360"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Telemetry Cards -->
+                <div class="telemetry-card border-glow-card">
+                    <span class="edge-light"></span>
+                    <div class="border-glow-inner">
+                        <span class="telemetry-number" id="val-action">MOVE</span>
+                        <span class="telemetry-label">SYSTEM COMMAND</span>
+                    </div>
+                </div>
+
+                <div class="telemetry-card border-glow-card">
+                    <span class="edge-light"></span>
+                    <div class="border-glow-inner">
+                        <span class="telemetry-number" id="val-offset">0.00 m</span>
+                        <span class="telemetry-label">LATERAL OFFSET</span>
+                    </div>
+                </div>
+
+                <div class="telemetry-card border-glow-card">
+                    <span class="edge-light"></span>
+                    <div class="border-glow-inner">
+                        <span class="telemetry-number" id="val-curvature">0.0 m</span>
+                        <span class="telemetry-label">ROAD CURVATURE</span>
+                    </div>
+                </div>
+
+                <!-- Threat / Alert Ledger -->
+                <div class="alerts-card border-glow-card">
+                    <span class="edge-light"></span>
+                    <div class="border-glow-inner">
+                        <div class="card-header">
+                            <h3>ACTIVE THREAT LEDGER</h3>
+                        </div>
+                        <div id="alerts-list" class="alerts-list">
+                            <div class="alert-item alert-clear">Roadway Clear — No active warnings</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Telemetry Orchestrator Script -->
+    <script src="app.js"></script>
+</body>
+</html>
