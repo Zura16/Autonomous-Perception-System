@@ -1,0 +1,596 @@
+/* ================== BASE STYLES (MATCHES AALIND.ORG) ================== */
+:root {
+    --bg: #F4F3EF;
+    --surface: #EEEDEA;
+    --surface-raised: #E8E7E3;
+    --border: rgba(0, 0, 0, 0.07);
+    --text-primary: #1a1a1a;
+    --text-secondary: rgba(0, 0, 0, 0.55);
+    --text-muted: rgba(0, 0, 0, 0.35);
+    --accent: #8B6914;
+    --accent-glow: rgba(139, 105, 20, 0.15);
+    --green: #2d8a4e;
+    --red: #d93838;
+    --yellow: #b58209;
+    --card-bg: #FAFAF8;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    /* Border Glow parameters matching portfolio */
+    --edge-proximity: 0;
+    --cursor-angle: 45deg;
+    --edge-sensitivity: 25;
+    --color-sensitivity: calc(var(--edge-sensitivity) + 20);
+    --border-radius: 16px;
+    --glow-padding: 40px;
+    --cone-spread: 25;
+    --fill-opacity: 0.4;
+}
+
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ================== LAYOUT STYLES ================== */
+.layout {
+    display: flex;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 60px 24px 40px;
+    gap: 40px;
+    position: relative;
+    z-index: 1;
+}
+
+/* ================== STICKY SIDEBAR ================== */
+.sidebar {
+    position: sticky;
+    top: 60px;
+    width: 320px;
+    flex-shrink: 0;
+    height: fit-content;
+    z-index: 10;
+}
+
+.sidebar-card .border-glow-inner {
+    padding: 40px 24px;
+    display: flex;
+    flex-direction: column;
+}
+
+.hud-logo {
+    font-size: 2.8rem;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.sidebar-name {
+    font-size: 1.6rem;
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 4px;
+    letter-spacing: -0.5px;
+}
+
+.sidebar-title {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--accent);
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.sidebar-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+    margin: 20px 0;
+}
+
+/* ================== BORDER GLOW CARDS ================== */
+.border-glow-card {
+    --edge-proximity: 0;
+    --cursor-angle: 45deg;
+    position: relative;
+    border-radius: var(--border-radius);
+    isolation: isolate;
+    transform: translate3d(0, 0, 0.01px);
+    display: grid;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    background: var(--card-bg);
+    overflow: visible;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.02);
+    transition: transform 0.25s ease;
+}
+
+.border-glow-card:hover {
+    transform: translateY(-2px);
+}
+
+.border-glow-card::before,
+.border-glow-card::after,
+.border-glow-card>.edge-light {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    transition: opacity 0.25s ease-out;
+    z-index: -1;
+}
+
+.border-glow-card:not(:hover):not(.sweep-active)::before,
+.border-glow-card:not(:hover):not(.sweep-active)::after,
+.border-glow-card:not(:hover):not(.sweep-active)>.edge-light {
+    opacity: 0;
+    transition: opacity 0.75s ease-in-out;
+}
+
+/* Colored mesh border overlay (Golden Hue) */
+.border-glow-card::before {
+    border: 1px solid transparent;
+    background:
+        linear-gradient(var(--card-bg) 0 100%) padding-box,
+        radial-gradient(at 80% 55%, hsl(40 70% 45%) 0px, transparent 50%) border-box,
+        radial-gradient(at 8% 6%, hsl(45 60% 50%) 0px, transparent 50%) border-box,
+        radial-gradient(at 82% 18%, hsl(30 60% 42%) 0px, transparent 50%) border-box,
+        radial-gradient(at 51% 4%, hsl(48 65% 52%) 0px, transparent 50%) border-box,
+        linear-gradient(hsl(40 70% 45%) 0 100%) border-box;
+
+    opacity: calc((var(--edge-proximity) - var(--color-sensitivity)) / (100 - var(--color-sensitivity)));
+
+    mask-image:
+        conic-gradient(from var(--cursor-angle) at center,
+            black calc(var(--cone-spread) * 1%),
+            transparent calc((var(--cone-spread) + 15) * 1%),
+            transparent calc((100 - var(--cone-spread) - 15) * 1%),
+            black calc((100 - var(--cone-spread)) * 1%));
+    -webkit-mask-image:
+        conic-gradient(from var(--cursor-angle) at center,
+            black calc(var(--cone-spread) * 1%),
+            transparent calc((var(--cone-spread) + 15) * 1%),
+            transparent calc((100 - var(--cone-spread) - 15) * 1%),
+            black calc((100 - var(--cone-spread)) * 1%));
+}
+
+/* Background Soft Glow */
+.border-glow-card::after {
+    border: 1px solid transparent;
+    background:
+        radial-gradient(at 80% 55%, hsl(40 70% 45%) 0px, transparent 50%) padding-box,
+        radial-gradient(at 8% 6%, hsl(45 60% 50%) 0px, transparent 50%) padding-box,
+        radial-gradient(at 51% 4%, hsl(48 65% 52%) 0px, transparent 50%) padding-box;
+
+    mask-image:
+        linear-gradient(to bottom, black, black),
+        radial-gradient(ellipse at 50% 50%, black 40%, transparent 65%),
+        conic-gradient(from var(--cursor-angle) at center, transparent 5%, black 15%, black 85%, transparent 95%);
+    -webkit-mask-image:
+        linear-gradient(to bottom, black, black),
+        radial-gradient(ellipse at 50% 50%, black 40%, transparent 65%),
+        conic-gradient(from var(--cursor-angle) at center, transparent 5%, black 15%, black 85%, transparent 95%);
+    
+    mask-composite: subtract, add;
+    -webkit-mask-composite: source-out, source-over;
+    opacity: calc(var(--fill-opacity) * (var(--edge-proximity) - var(--color-sensitivity)) / (100 - var(--color-sensitivity)));
+    mix-blend-mode: soft-light;
+}
+
+.border-glow-inner {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+    border-radius: inherit;
+}
+
+/* ================== MAIN CONTENT PANEL ================== */
+.main-content {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Heading with big muted outlines */
+.section {
+    position: relative;
+    margin-bottom: 40px;
+}
+
+.section-bg-title {
+    position: absolute;
+    top: -25px;
+    left: -10px;
+    font-size: 5rem;
+    font-weight: 900;
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(0, 0, 0, 0.03);
+    user-select: none;
+    pointer-events: none;
+    letter-spacing: 4px;
+}
+
+.section-title {
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    position: relative;
+}
+
+.hero-description {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    max-width: 680px;
+    margin-bottom: 24px;
+}
+
+/* ================== CONTROL FORM STYLES ================== */
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.control-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+}
+
+.form-select, .form-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: var(--font);
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    outline: none;
+    transition: all 0.25s ease;
+}
+
+.form-select:focus, .form-input:focus {
+    border-color: var(--accent);
+    background: var(--card-bg);
+}
+
+/* Toggle Switch */
+.toggle-container {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    gap: 12px;
+}
+
+.toggle-container input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 22px;
+    background-color: var(--surface-raised);
+    transition: .4s;
+    border-radius: 34px;
+    border: 1px solid var(--border);
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--text-secondary);
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+    background-color: var(--accent-glow);
+    border-color: var(--accent);
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(22px);
+    background-color: var(--accent);
+}
+
+.toggle-label {
+    margin-top: 2px;
+}
+
+/* Status Badge */
+.badge {
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 50px;
+    text-align: center;
+    width: fit-content;
+    letter-spacing: 1px;
+}
+
+.badge-active {
+    background: rgba(45, 138, 78, 0.15);
+    color: var(--green);
+    border: 1px solid rgba(45, 138, 78, 0.3);
+}
+
+.badge-inactive {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+/* Button */
+.btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    font-family: var(--font);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: var(--text-primary);
+    color: var(--bg);
+}
+
+.btn-primary:hover {
+    background: var(--accent);
+    color: white;
+}
+
+.btn-active {
+    background: var(--red);
+    color: white;
+}
+
+.btn-active:hover {
+    background: #b52a2c;
+}
+
+/* ================== DASHBOARD GRID ================== */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 24px;
+}
+
+/* Header style inside cards */
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.card-header h3 {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.card-header-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.dot-live {
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red);
+    animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+    0% { opacity: 0.4; }
+    50% { opacity: 1; }
+    100% { opacity: 0.4; }
+}
+
+/* ================== HUD MONITOR ================== */
+.hud-monitor {
+    grid-column: span 1;
+}
+
+.video-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #000;
+}
+
+.video-feed {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.video-placeholder-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(26, 26, 26, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ================== RADAR CONTAINER ================== */
+.radar-card {
+    grid-column: span 1;
+}
+
+.radar-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    background: #FAFAF8;
+    height: 100%;
+}
+
+#radar-canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+/* ================== TELEMETRY CARDS ================== */
+.telemetry-card {
+    grid-column: span 1;
+}
+
+.telemetry-card .border-glow-inner {
+    padding: 30px 24px;
+    text-align: center;
+    align-items: center;
+}
+
+.telemetry-number {
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.telemetry-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+/* Curvature, offset, and action command state colors */
+#val-action {
+    color: var(--green);
+}
+
+.warn-ttc #val-action {
+    color: var(--yellow);
+}
+
+.brake-ttc #val-action {
+    color: var(--red);
+    animation: flash-red-text 1s infinite alternate;
+}
+
+@keyframes flash-red-text {
+    from { color: var(--red); }
+    to { color: #801214; }
+}
+
+/* ================== THREAT LEDGER ================== */
+.alerts-card {
+    grid-column: span 2;
+}
+
+.alerts-list {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 100px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.alert-item {
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid transparent;
+}
+
+.alert-clear {
+    background: rgba(45, 138, 78, 0.05);
+    color: var(--green);
+    border-color: rgba(45, 138, 78, 0.15);
+}
+
+.alert-warning {
+    background: rgba(181, 130, 9, 0.08);
+    color: var(--yellow);
+    border-color: rgba(181, 130, 9, 0.2);
+}
+
+.alert-critical {
+    background: rgba(217, 56, 56, 0.08);
+    color: var(--red);
+    border-color: rgba(217, 56, 56, 0.25);
+    font-weight: 700;
+    animation: pulse-border 1.5s infinite;
+}
+
+@keyframes pulse-border {
+    0% { border-color: rgba(217, 56, 56, 0.25); }
+    50% { border-color: rgba(217, 56, 56, 0.7); }
+    100% { border-color: rgba(217, 56, 56, 0.25); }
+}
+
+/* ================== RESPONSIVE MEDIA STYLES ================== */
+@media (max-width: 1024px) {
+    .layout {
+        flex-direction: column;
+        padding-top: 40px;
+    }
+    
+    .sidebar {
+        width: 100%;
+        position: static;
+    }
+    
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .hud-monitor, .radar-card, .telemetry-card, .alerts-card {
+        grid-column: span 1;
+    }
+}
