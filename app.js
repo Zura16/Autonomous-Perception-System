@@ -1,5 +1,5 @@
-// Base API URL
-const API_BASE = "http://127.0.0.1:5000";
+// Base API URL configuration (persisted in localStorage)
+let API_BASE = localStorage.getItem("perception_api_base") || "http://127.0.0.1:5000";
 
 // Dashboard States
 let isRunning = false;
@@ -377,6 +377,16 @@ function drawRadar(laneOffset, laneCurvature, objects) {
 // ================== INIT ==================
 document.addEventListener("DOMContentLoaded", () => {
     initBorderGlows();
+    
+    // Bind API URL Input & Sync
+    const apiUrlInput = document.getElementById("api-url-input");
+    if (apiUrlInput) {
+        apiUrlInput.value = API_BASE;
+        apiUrlInput.addEventListener("input", () => {
+            API_BASE = apiUrlInput.value.trim();
+            localStorage.setItem("perception_api_base", API_BASE);
+        });
+    }
     
     // Check initial backend status
     fetch(`${API_BASE}/api/status`)
