@@ -92,6 +92,25 @@ python main.py
 
 ---
 
+## Running the Full-Stack Web HUD
+
+To launch the web backend server and interact with the graphical HUD dashboard:
+
+1. **Start the Flask Web Server**:
+   ```bash
+   python main_web.py
+   ```
+2. **Open the Dashboard**:
+   Open your browser and navigate to: [http://127.0.0.1:5000](http://127.0.0.1:5000)
+3. **Interact with the Control HUD**:
+   - Use the **Start / Stop** toggle button to launch or terminate the background perception pipeline.
+   - Dynamically adjust inputs using the **Video Source** selector (supports synthetic generator, hardware webcam, or custom video file paths).
+   - Toggle **MiDaS Depth** mapping to switch between geometric and deep learning monocular depth estimators.
+   - Monitor the **Top-Down 2D Radar Canvas** displaying tracked cars and pedestrians relative to the ego vehicle in real time.
+   - View active threat logs inside the **Threat Ledger panel** and hovered mouse glows.
+
+---
+
 ## Running Unit Tests
 
 Run the unit test suite to verify math projection coordinate conversions, tracking associations, and collision warning logic:
@@ -122,13 +141,19 @@ To add **15% of files daily** to your GitHub repository:
 
 ## Project Release History
 
-To meet the incremental codebase publishing requirements, the repository was compiled and released over a 7-day schedule, staging, committing, and pushing files separately each day:
+To meet the incremental codebase publishing requirements, the repository was compiled and released over a 13-day schedule, staging, committing, and pushing files separately each day:
 
 - **Day 1**: `requirements.txt`, `.gitignore` (Setup and dependency base)
 - **Day 2**: `config.py`, `generate_synthetic_video.py` (System configurations and simulation data generator)
-- **Day 3**: `src/__init__.py`, `src/utils.py`, `src/video_stream.py` (Dashboard HUD HUD tools and input stream readers)
+- **Day 3**: `src/__init__.py`, `src/utils.py`, `src/video_stream.py` (Dashboard HUD tools and input stream readers)
 - **Day 4**: `src/detector.py`, `src/tracker.py` (YOLOv8 deep learning / OpenCV color fallback detector and greedy IoU tracker)
 - **Day 5**: `src/lane_detector.py`, `src/depth_estimator.py` (Bird's-eye perspective lane solver and monocular distance geometry estimator)
 - **Day 6**: `src/decision_logic.py`, `main.py` (Collision avoidance TTC safety logic and system main orchestrator)
 - **Day 7**: `tests/__init__.py`, `tests/test_pipeline.py`, `README.md`, `commit_scheduler.py`, `commit_state.json` (Perception test suites, release state compiler, and documentation)
+- **Day 8**: `requirements.txt` (Updated package dependencies including Flask & Flask-Cors)
+- **Day 9**: `src/web_stream_handler.py` (Thread-safe frame MJPEG stream handlers)
+- **Day 10**: `main_web.py` (Flask backend endpoints and background threads orchestrators)
+- **Day 11**: `web/index.html` (Web HUD dashboard structures styled after aalind.org portfolio layout)
+- **Day 12**: `web/styles.css` (Portfolio-matched theme styles and custom border-glow masks)
+- **Day 13**: `web/app.js` (JavaScript client controllers and top-down radar canvas renderers)
 

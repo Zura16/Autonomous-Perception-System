@@ -6,7 +6,7 @@ import argparse
 
 STATE_FILE = "commit_state.json"
 
-# Define the 7 groups of files to push daily (~15% of files per day)
+# Define the groups of files to push daily (~15% of files per day)
 FILE_GROUPS = [
     ["requirements.txt", ".gitignore"],
     ["config.py", "generate_synthetic_video.py"],
@@ -14,7 +14,13 @@ FILE_GROUPS = [
     ["src/detector.py", "src/tracker.py"],
     ["src/lane_detector.py", "src/depth_estimator.py"],
     ["src/decision_logic.py", "main.py"],
-    ["tests/__init__.py", "tests/test_pipeline.py", "README.md", "commit_scheduler.py", "commit_state.json"]
+    ["tests/__init__.py", "tests/test_pipeline.py", "README.md", "commit_scheduler.py", "commit_state.json"],
+    ["requirements.txt"],
+    ["src/web_stream_handler.py"],
+    ["main_web.py"],
+    ["web/index.html"],
+    ["web/styles.css"],
+    ["web/app.js"]
 ]
 
 def load_state():
