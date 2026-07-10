@@ -2,12 +2,31 @@ import cv2
 import numpy as np
 import config
 
+def draw_hud_corners(img, bbox, color, length=12, thickness=2):
+    """Draws tech-style HUD corners around a bounding box instead of a full rectangle."""
+    x1, y1, x2, y2 = map(int, bbox)
+    # Top-Left
+    cv2.line(img, (x1, y1), (x1 + length, y1), color, thickness)
+    cv2.line(img, (x1, y1), (x1, y1 + length), color, thickness)
+    # Top-Right
+    cv2.line(img, (x2, y1), (x2 - length, y1), color, thickness)
+    cv2.line(img, (x2, y1), (x2, y1 + length), color, thickness)
+    # Bottom-Left
+    cv2.line(img, (x1, y2), (x1 + length, y2), color, thickness)
+    cv2.line(img, (x1, y2), (x1, y2 - length), color, thickness)
+    # Bottom-Right
+    cv2.line(img, (x2, y2), (x2 - length, y2), color, thickness)
+    cv2.line(img, (x2, y2), (x2, y2 - length), color, thickness)
+
 def draw_tracked_objects(frame, objects):
     """
-    Draws tracked bounding boxes, IDs, estimated distance, relative speed, and warnings.
+    Draws tracked targets with transparent status badges and high-tech corner brackets.
     """
+    # Create semi-transparent overlay layer for labels
+    overlay = frame.copy()
+    
     for obj in objects:
-        bbox = obj.get("bbox")  # (x1, y1, x2, y2)
+        bbox = obj.get("bbox")
         if bbox is None:
             continue
         x1, y1, x2, y2 = map(int, bbox)
@@ -17,36 +36,50 @@ def draw_tracked_objects(frame, objects):
         velocity = obj.get("velocity", 0.0)
         ttc = obj.get("ttc")
 
-        # Select color based on warning state
+        # Select color based on threat level
         color = config.COLOR_GREEN
         warning_text = ""
         
         if ttc is not None:
             if ttc < config.CRITICAL_TTC_THRESHOLD or (distance is not None and distance < config.CRITICAL_DISTANCE):
                 color = config.COLOR_RED
-                warning_text = "CRITICAL BRAKE!"
+                warning_text = "COLLISION RISK!"
             elif ttc < config.SAFE_TTC_THRESHOLD:
                 color = config.COLOR_YELLOW
-                warning_text = "COLLISION WARNING"
+                warning_text = "CLOSE APPROACH"
+        elif distance is not None and distance < config.CRITICAL_DISTANCE:
+            color = config.COLOR_RED
+            warning_text = "CRITICAL PROXIMITY"
                 
-        # Draw bounding box
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        # Draw high-tech HUD corner brackets
+        draw_hud_corners(frame, bbox, color, length=12, thickness=2)
         
-        # Draw label background
-        label = f"ID {obj_id} | {class_name.capitalize()}"
+        # Soft transparent bbox fill
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+        
+        # Compile info text
+        label = f"[ID {obj_id}] {class_name.upper()}"
         if distance is not None:
             label += f" | {distance:.1f}m"
         if velocity is not None and abs(velocity) > 0.1:
             label += f" | {velocity:+.1f}m/s"
-            
-        cv2.rectangle(frame, (x1, y1 - 22), (x1 + len(label) * 8 + 10, y1), color, -1)
-        cv2.putText(frame, label, (x1 + 5, y1 - 7), config.FONT, 0.45, config.COLOR_WHITE, 1, cv2.LINE_AA)
+
+        # Text size calculation
+        (w, h), _ = cv2.getTextSize(label, config.FONT, 0.35, 1)
         
-        # Draw warning alert above the box
+        # Draw label background box
+        cv2.rectangle(frame, (x1, y1 - h - 10), (x1 + w + 12, y1), (15, 15, 15), -1)
+        cv2.rectangle(frame, (x1, y1 - h - 10), (x1 + w + 12, y1), color, 1)
+        cv2.putText(frame, label, (x1 + 6, y1 - 5), config.FONT, 0.35, config.COLOR_WHITE, 1, cv2.LINE_AA)
+        
+        # Draw Warning Tag above box
         if warning_text:
-            cv2.rectangle(frame, (x1, y1 - 44), (x1 + len(warning_text) * 8 + 10, y1 - 22), config.COLOR_RED, -1)
-            cv2.putText(frame, warning_text, (x1 + 5, y1 - 29), config.FONT, 0.45, config.COLOR_WHITE, 1, cv2.LINE_AA)
-            
+            (ww, wh), _ = cv2.getTextSize(warning_text, config.FONT, 0.35, 1)
+            cv2.rectangle(frame, (x1, y1 - h - 25 - wh), (x1 + ww + 12, y1 - h - 10), (15, 15, 220) if color == config.COLOR_RED else (15, 180, 180), -1)
+            cv2.putText(frame, warning_text, (x1 + 6, y1 - h - 17), config.FONT, 0.35, config.COLOR_WHITE, 1, cv2.LINE_AA)
+
+    # Blend soft filled boxes slightly
+    cv2.addWeighted(overlay, 0.1, frame, 0.9, 0, frame)
     return frame
 
 def draw_lane_overlay(frame, left_fit, right_fit, ploty, Minv):
