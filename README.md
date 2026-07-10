@@ -90,26 +90,6 @@ python main.py
   python main.py --use-dl-depth
   ```
 
----
-
-## Running the Full-Stack Web HUD
-
-To launch the web backend server and interact with the graphical HUD dashboard:
-
-1. **Start the Flask Web Server**:
-   ```bash
-   python main_web.py
-   ```
-2. **Open the Dashboard**:
-   Open your browser and navigate to: [http://127.0.0.1:5000](http://127.0.0.1:5000)
-3. **Interact with the Control HUD**:
-   - Use the **Start / Stop** toggle button to launch or terminate the background perception pipeline.
-   - Dynamically adjust inputs using the **Video Source** selector (supports synthetic generator, hardware webcam, or custom video file paths).
-   - Toggle **MiDaS Depth** mapping to switch between geometric and deep learning monocular depth estimators.
-   - Monitor the **Top-Down 2D Radar Canvas** displaying tracked cars and pedestrians relative to the ego vehicle in real time.
-   - View active threat logs inside the **Threat Ledger panel** and hovered mouse glows.
-
----
 
 ## Running Unit Tests
 
