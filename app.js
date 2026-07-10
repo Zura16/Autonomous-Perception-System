@@ -239,21 +239,6 @@ function drawRadar(laneOffset, laneCurvature, objects) {
     ctx.fillStyle = "#FAFAF8"; // Matches card bg
     ctx.fillRect(0, 0, w, h);
     
-    // Draw Radar Range Circles
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.05)";
-    ctx.lineWidth = 1;
-    for (let r = 50; r <= 300; r += 70) {
-        ctx.beginPath();
-        ctx.arc(w / 2, h - 40, r, Math.PI, 2 * Math.PI);
-        ctx.stroke();
-        
-        // Add range labels
-        const meters = Math.round(r / 5.6); // 5.6px per meter scale
-        ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-        ctx.font = "8px Inter";
-        ctx.fillText(`${meters}m`, w / 2 + r - 16, h - 43);
-    }
-    
     // Horizontal center coordinates
     const cx = w / 2;
     const cy = h - 40;
@@ -261,28 +246,65 @@ function drawRadar(laneOffset, laneCurvature, objects) {
     // Scaling metrics (pixels per meter)
     const scaleX = w / 30; // 30 meters horizontal range (-15m to +15m)
     const scaleY = 280 / 50; // 50 meters vertical range (mapped to 280px)
-    
+
+    // Draw Radar grid lines
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.02)";
+    ctx.lineWidth = 1;
+    // Draw vertical grid lines every 5m
+    for (let x = -15; x <= 15; x += 5) {
+        ctx.beginPath();
+        ctx.moveTo(cx + x * scaleX, 0);
+        ctx.lineTo(cx + x * scaleX, h);
+        ctx.stroke();
+    }
+    // Draw horizontal grid lines every 10m
+    for (let z = 0; z <= 50; z += 10) {
+        ctx.beginPath();
+        ctx.moveTo(0, cy - z * scaleY);
+        ctx.lineTo(w, cy - z * scaleY);
+        ctx.stroke();
+    }
+
+    // Draw Radar Range Circles (dashed, gold accent)
+    ctx.strokeStyle = "rgba(139, 105, 20, 0.15)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    for (let r = 50; r <= 300; r += 70) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI, 2 * Math.PI);
+        ctx.stroke();
+        
+        // Add range labels
+        const meters = Math.round(r / 5.6);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+        ctx.font = "8px Inter";
+        ctx.fillText(`${meters}m`, cx + r - 18, cy - 6);
+    }
+    ctx.setLineDash([]); // reset
+
+    // Draw central vertical axis line (glowing line)
+    ctx.strokeStyle = "rgba(139, 105, 20, 0.08)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, 0);
+    ctx.lineTo(cx, h);
+    ctx.stroke();
+
     // Draw Lane Boundaries (curved lane simulation)
     ctx.strokeStyle = "#8B6914"; // Gold lane boundary
     ctx.lineWidth = 3;
     ctx.beginPath();
     
-    // Draw left and right lane boundaries
     const laneWidth = 3.7; // standard lane width in meters
-    
-    // Curve scaling based on curvature
-    // 1 / R is the curvature. We integrate this to get horizontal shift
     let curvatureFactor = 0;
     if (laneCurvature > 50 && laneCurvature < 3000) {
-        curvatureFactor = 300.0 / laneCurvature; // scale offset coefficient
+        curvatureFactor = 300.0 / laneCurvature;
     }
     
     // Draw Left Lane
     for (let z = 0; z <= 50; z += 2) {
         const offsetLeft = -(laneWidth / 2) - laneOffset;
-        // Curve equation: x_shift = z_dist^2 * c
         const xShift = (z * z) * 0.004 * curvatureFactor;
-        
         const px = cx + (offsetLeft + xShift) * scaleX;
         const py = cy - z * scaleY;
         
@@ -291,13 +313,12 @@ function drawRadar(laneOffset, laneCurvature, objects) {
     }
     ctx.stroke();
     
-    // Draw Right Lane
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.15)"; // Soft grey right boundary
+    // Draw Right Lane (sleek gold-white blend)
+    ctx.strokeStyle = "rgba(139, 105, 20, 0.3)";
     ctx.beginPath();
     for (let z = 0; z <= 50; z += 2) {
         const offsetRight = (laneWidth / 2) - laneOffset;
         const xShift = (z * z) * 0.004 * curvatureFactor;
-        
         const px = cx + (offsetRight + xShift) * scaleX;
         const py = cy - z * scaleY;
         
@@ -307,8 +328,8 @@ function drawRadar(laneOffset, laneCurvature, objects) {
     ctx.stroke();
     
     // Draw Dashed center dividing line
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.1)";
-    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = "rgba(139, 105, 20, 0.15)";
+    ctx.setLineDash([6, 6]);
     ctx.beginPath();
     for (let z = 0; z <= 50; z += 2) {
         const xShift = (z * z) * 0.004 * curvatureFactor;
@@ -319,17 +340,21 @@ function drawRadar(laneOffset, laneCurvature, objects) {
         else ctx.lineTo(px, py);
     }
     ctx.stroke();
-    ctx.setLineDash([]); // Reset dash
+    ctx.setLineDash([]); // Reset
     
-    // Draw Ego Vehicle (our car at the bottom)
+    // Draw Ego Vehicle (our car at the bottom - sleek minimal vector style)
     ctx.fillStyle = "#1A1A1A"; // charcoal black
-    ctx.fillRect(cx - 8, cy - 10, 16, 26);
-    // Draw simple wheels
+    // Body
+    ctx.fillRect(cx - 7, cy - 12, 14, 24);
+    // Wheels
     ctx.fillStyle = "#8B6914";
-    ctx.fillRect(cx - 10, cy - 6, 2, 6);
-    ctx.fillRect(cx + 8, cy - 6, 2, 6);
-    ctx.fillRect(cx - 10, cy + 10, 2, 6);
-    ctx.fillRect(cx + 8, cy + 10, 2, 6);
+    ctx.fillRect(cx - 9, cy - 8, 2, 5);
+    ctx.fillRect(cx + 7, cy - 8, 2, 5);
+    ctx.fillRect(cx - 9, cy + 5, 2, 5);
+    ctx.fillRect(cx + 7, cy + 5, 2, 5);
+    // Windshield
+    ctx.fillStyle = "rgba(139, 105, 20, 0.5)";
+    ctx.fillRect(cx - 5, cy - 6, 10, 3);
     
     // Draw Tracked Obstacles
     objects.forEach(obj => {
@@ -348,28 +373,27 @@ function drawRadar(laneOffset, laneCurvature, objects) {
         ctx.fillStyle = color;
         
         if (obj.class_name === "person") {
-            // Draw pedestrian as a dot
+            // Draw pedestrian as a tech dot
             ctx.beginPath();
-            ctx.arc(ox, oy, 6, 0, 2 * Math.PI);
+            ctx.arc(ox, oy, 5, 0, 2 * Math.PI);
             ctx.fill();
             
-            // Pedestrian outline
             ctx.strokeStyle = "#FAFAF8";
             ctx.lineWidth = 1;
             ctx.stroke();
         } else {
-            // Draw vehicle as a box
-            ctx.fillRect(ox - 10, oy - 14, 20, 24);
+            // Draw vehicle as a clean sleek box
+            ctx.fillRect(ox - 8, oy - 12, 16, 20);
             
-            // Draw windshield/headlights indicators
-            ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-            ctx.fillRect(ox - 7, oy - 10, 14, 4);
+            // Draw headlights
+            ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+            ctx.fillRect(ox - 6, oy - 10, 12, 3);
         }
         
         // Add ID / Distance Text labels
         ctx.fillStyle = "#1A1A1A";
         ctx.font = "bold 9px Inter";
-        const labelText = `${obj.class_name.toUpperCase()} ${obj.id} (${obj.distance.toFixed(1)}m)`;
+        const labelText = `${obj.class_name.toUpperCase()} ${obj.id} [${obj.distance.toFixed(1)}m]`;
         ctx.fillText(labelText, ox + 14, oy + 4);
     });
 }
