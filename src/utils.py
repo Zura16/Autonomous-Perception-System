@@ -118,55 +118,57 @@ def draw_lane_overlay(frame, left_fit, right_fit, ploty, Minv):
 
 def draw_dashboard(frame, decision):
     """
-    Overlays a neat semi-transparent dashboard showing telemetry, alerts, and commands.
+    Overlays a telemetry stats dashboard matching the gold portfolio aesthetic.
     """
     overlay = frame.copy()
     
-    # Draw background panel at the top
-    cv2.rectangle(overlay, (20, 20), (450, 190), (30, 30, 30), -1)
-    cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
+    # Draw dashboard box (Glassmorphic dark styling)
+    cv2.rectangle(overlay, (20, 20), (450, 185), (15, 15, 15), -1)
+    cv2.addWeighted(overlay, 0.70, frame, 0.30, 0, frame)
     
-    # Dashboard border
-    cv2.rectangle(frame, (20, 20), (450, 190), (100, 100, 100), 1)
+    # Gold border matching aalind.org accent colors (BGR: 20, 105, 139)
+    cv2.rectangle(frame, (20, 20), (450, 185), (20, 105, 139), 1)
     
-    # Text positions
     x, y_start, spacing = 35, 45, 22
     
     # Title
-    cv2.putText(frame, "PERCEPTION SYSTEM TELEMETRY", (x, y_start), config.FONT, 0.55, config.COLOR_YELLOW, 2, cv2.LINE_AA)
+    cv2.putText(frame, "AUTONOMOUS VISION HUD TELEMETRY", (x, y_start), config.FONT, 0.45, (20, 105, 139), 1, cv2.LINE_AA)
     
-    # Extract decision stats
     action = decision.get("action", "MOVE")
     offset = decision.get("lane_offset", 0.0)
     curvature = decision.get("lane_curvature", 0.0)
     warnings = decision.get("warnings", [])
     
-    # Color action text appropriately
+    # Action state colors
     action_color = config.COLOR_GREEN
     if action == "BRAKE":
         action_color = config.COLOR_RED
-    elif action == "DESTRUCTIVE" or "COLLISION" in "".join(warnings):
+    elif action == "WARN":
         action_color = config.COLOR_YELLOW
         
-    # Overlay metrics
-    cv2.putText(frame, f"System Action  : {action}", (x, y_start + spacing), config.FONT, 0.45, action_color, 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Lane Curvature : {curvature:.1f} m", (x, y_start + 2*spacing), config.FONT, 0.45, config.COLOR_WHITE, 1, cv2.LINE_AA)
-    cv2.putText(frame, f"Offset fr Center: {offset:+.2f} m", (x, y_start + 3*spacing), config.FONT, 0.45, config.COLOR_WHITE, 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Ego Command   : {action}", (x, y_start + spacing), config.FONT, 0.40, action_color, 1, cv2.LINE_AA)
     
-    # Warnings Display
-    warning_y = y_start + 4*spacing
-    cv2.putText(frame, "Alerts/Warnings:", (x, warning_y), config.FONT, 0.45, config.COLOR_WHITE, 1, cv2.LINE_AA)
+    curve_txt = "Straight" if curvature > 3000 else f"{curvature:.1f} m"
+    cv2.putText(frame, f"Road Curvature: {curve_txt}", (x, y_start + 2*spacing), config.FONT, 0.40, config.COLOR_WHITE, 1, cv2.LINE_AA)
     
+    offset_sign = "+" if offset >= 0 else ""
+    cv2.putText(frame, f"Lateral Offset: {offset_sign}{offset:.2f} m", (x, y_start + 3*spacing), config.FONT, 0.40, config.COLOR_WHITE, 1, cv2.LINE_AA)
+    
+    # Active threats ledger
+    warn_y = y_start + 4*spacing
+    cv2.putText(frame, "Threat Alerts :", (x, warn_y), config.FONT, 0.40, config.COLOR_WHITE, 1, cv2.LINE_AA)
     if not warnings:
-        cv2.putText(frame, "None - Road Clear", (x + 130, warning_y), config.FONT, 0.45, config.COLOR_GREEN, 1, cv2.LINE_AA)
+        cv2.putText(frame, "ROAD CLEAR", (x + 130, warn_y), config.FONT, 0.40, config.COLOR_GREEN, 1, cv2.LINE_AA)
     else:
-        warn_str = ", ".join(warnings[:2])  # display top 2 warnings
-        cv2.putText(frame, warn_str, (x + 130, warning_y), config.FONT, 0.45, config.COLOR_RED, 1, cv2.LINE_AA)
+        warn_txt = ", ".join(warnings[:2])
+        cv2.putText(frame, warn_txt, (x + 130, warn_y), config.FONT, 0.40, config.COLOR_RED, 1, cv2.LINE_AA)
         
-    # Draw Target HUD at the center of the frame
-    # Pitch line / Center crosshair
+    # Draw futuristic targeting reticle crosshair in the center
     cx, cy = config.FRAME_WIDTH // 2, config.FRAME_HEIGHT // 2
-    cv2.line(frame, (cx - 15, cy), (cx + 15, cy), config.COLOR_GREEN, 1)
-    cv2.line(frame, (cx, cy - 15), (cx, cy + 15), config.COLOR_GREEN, 1)
+    # Draw outer reticle ring
+    cv2.circle(frame, (cx, cy), 18, (0, 200, 0), 1, cv2.LINE_AA)
+    # Draw tick coordinates
+    cv2.line(frame, (cx - 6, cy), (cx + 6, cy), (0, 200, 0), 1)
+    cv2.line(frame, (cx, cy - 6), (cx, cy + 6), (0, 200, 0), 1)
     
     return frame
