@@ -363,12 +363,26 @@ function drawRadar(laneOffset, laneCurvature, objects) {
         
         // Color based on safety risk (TTC warning)
         let color = "#2d8a4e"; // safe green
+        let outlineColor = "rgba(45, 138, 78, 0.2)";
         if (obj.ttc !== null) {
-            if (obj.ttc < 1.2) color = "#d93838"; // brake red
-            else if (obj.ttc < 2.5) color = "#b58209"; // warn gold
+            if (obj.ttc < 1.2) {
+                color = "#d93838"; // brake red
+                outlineColor = "rgba(217, 56, 56, 0.25)";
+            }
+            else if (obj.ttc < 2.5) {
+                color = "#b58209"; // warn gold
+                outlineColor = "rgba(181, 130, 9, 0.25)";
+            }
         } else if (obj.distance < 8.0) {
             color = "#d93838";
+            outlineColor = "rgba(217, 56, 56, 0.25)";
         }
+        
+        // Draw threat bounding circle behind the object (radar halo)
+        ctx.fillStyle = outlineColor;
+        ctx.beginPath();
+        ctx.arc(ox, oy, 16, 0, 2 * Math.PI);
+        ctx.fill();
         
         ctx.fillStyle = color;
         
@@ -388,6 +402,22 @@ function drawRadar(laneOffset, laneCurvature, objects) {
             // Draw headlights
             ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
             ctx.fillRect(ox - 6, oy - 10, 12, 3);
+        }
+        
+        // Draw velocity vector line pointing upwards
+        if (obj.velocity && Math.abs(obj.velocity) > 0.2) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(ox, oy);
+            // Draw line length scaled by velocity (e.g. 3.5px per m/s)
+            ctx.lineTo(ox, oy - obj.velocity * 3.5);
+            ctx.stroke();
+            // Arrowhead
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(ox, oy - obj.velocity * 3.5, 2, 0, 2 * Math.PI);
+            ctx.fill();
         }
         
         // Add ID / Distance Text labels
