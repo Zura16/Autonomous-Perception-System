@@ -84,37 +84,36 @@ def draw_tracked_objects(frame, objects):
 
 def draw_lane_overlay(frame, left_fit, right_fit, ploty, Minv):
     """
-    Fills the detected lane region on a bird's-eye view, unwarps it, and blends with the original frame.
+    Fills the detected lane region with a neon-cyan cyber flow and unwarps it.
     """
     if left_fit is None or right_fit is None or ploty is None:
         return frame
         
-    # Generate points for left and right curves
     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
     right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
     
-    # Create an image to draw the lines on
     warp_zero = np.zeros((config.FRAME_HEIGHT, config.FRAME_WIDTH, 3), dtype=np.uint8)
     
-    # Recast the x and y points into usable format for cv2.fillPoly()
     pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
     pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
     pts = np.hstack((pts_left, pts_right)).astype(np.int32)
     
-    # Draw the lane onto the warped blank image (green lane fill)
-    cv2.fillPoly(warp_zero, [pts], (0, 100, 0))
+    # Glowing neon-cyan lane interior (BGR: 180, 120, 0)
+    cv2.fillPoly(warp_zero, [pts], (180, 120, 0))
     
-    # Draw outer lane lines (yellow left, white right)
+    # Draw left boundary line (neon gold/amber BGR: 20, 105, 139 to match portfolio site)
     pts_left_line = pts_left.astype(np.int32)
-    pts_right_line = np.array([np.transpose(np.vstack([right_fitx, ploty]))]).astype(np.int32)
-    cv2.polylines(warp_zero, pts_left_line, False, (0, 215, 255), 15)
-    cv2.polylines(warp_zero, pts_right_line, False, (255, 255, 255), 15)
+    cv2.polylines(warp_zero, pts_left_line, False, (20, 105, 139), 8)
     
-    # Warp back to original image space using inverse perspective matrix (Minv)
+    # Draw right boundary line (bright white/cyan BGR: 240, 240, 240)
+    pts_right_line = np.array([np.transpose(np.vstack([right_fitx, ploty]))]).astype(np.int32)
+    cv2.polylines(warp_zero, pts_right_line, False, (240, 240, 240), 8)
+    
+    # Warp back to original perspective
     newwarp = cv2.warpPerspective(warp_zero, Minv, (config.FRAME_WIDTH, config.FRAME_HEIGHT))
     
-    # Combine the result with the original image
-    result = cv2.addWeighted(frame, 1.0, newwarp, 0.3, 0)
+    # Alpha blend for a glowing cyber-lane effect
+    result = cv2.addWeighted(frame, 1.0, newwarp, 0.35, 0)
     return result
 
 def draw_dashboard(frame, decision):
