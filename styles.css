@@ -34,7 +34,11 @@
 
 body {
     font-family: var(--font);
-    background: var(--bg);
+    background-color: var(--bg);
+    background-image: 
+        linear-gradient(rgba(0, 0, 0, 0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.015) 1px, transparent 1px);
+    background-size: 24px 24px;
     color: var(--text-primary);
     line-height: 1.6;
     overflow-x: hidden;
