@@ -343,43 +343,147 @@ input:checked + .toggle-slider:before {
     border: 1px solid rgba(45, 138, 78, 0.3);
 }
 
+.badge-paused {
+    background: rgba(181, 130, 9, 0.15);
+    color: var(--yellow);
+    border: 1px solid rgba(181, 130, 9, 0.3);
+}
+
 .badge-inactive {
     background: rgba(0, 0, 0, 0.05);
     color: var(--text-secondary);
     border: 1px solid var(--border);
 }
 
-/* Button */
+/* Control Buttons & Button Group */
+.button-group {
+    display: flex;
+    gap: 8px;
+}
+
 .btn {
     width: 100%;
-    padding: 12px;
+    padding: 10px 12px;
     border-radius: 10px;
     font-family: var(--font);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 700;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     border: none;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
-.btn-primary {
-    background: var(--text-primary);
-    color: var(--bg);
+.btn-control {
+    flex: 1;
+    padding: 10px 6px;
 }
 
-.btn-primary:hover {
-    background: var(--accent);
+.btn-play {
+    background: var(--green);
     color: white;
 }
 
-.btn-active {
+.btn-play:hover:not(:disabled) {
+    background: #236c3d;
+    transform: translateY(-1px);
+}
+
+.btn-pause {
+    background: var(--yellow);
+    color: white;
+}
+
+.btn-pause:hover:not(:disabled) {
+    background: #946906;
+    transform: translateY(-1px);
+}
+
+.btn-stop {
+    background: var(--surface-raised);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+.btn-stop:hover:not(:disabled) {
+    background: var(--red);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Preset & Obstacle Spawner Buttons */
+.preset-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.btn-preset {
+    padding: 8px 6px;
+    font-size: 0.73rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.btn-preset:hover {
+    background: var(--card-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.btn-danger-preset {
+    grid-column: span 2;
+    background: rgba(217, 56, 56, 0.06);
+    color: var(--red);
+    border-color: rgba(217, 56, 56, 0.2);
+}
+
+.btn-danger-preset:hover {
     background: var(--red);
     color: white;
 }
 
-.btn-active:hover {
-    background: #b52a2c;
+.btn-secondary-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    padding: 8px;
+}
+
+.btn-secondary-outline:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-primary);
+}
+
+.radar-tip {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 6px;
+    font-weight: 500;
+}
+
+.radar-container canvas {
+    cursor: crosshair;
+    border-radius: 8px;
+    transition: box-shadow 0.2s ease;
+}
+
+.radar-container canvas:hover {
+    box-shadow: 0 0 10px rgba(139, 105, 20, 0.15);
 }
 
 /* ================== DASHBOARD GRID ================== */
