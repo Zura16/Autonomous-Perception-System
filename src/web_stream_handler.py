@@ -6,6 +6,7 @@ class WebStreamHandler:
     def __init__(self):
         self.frame_lock = threading.Lock()
         self.telemetry_lock = threading.Lock()
+        self.obstacle_lock = threading.Lock()
         self.latest_frame = None
         self.latest_telemetry = {
             "action": "MOVE",
@@ -15,6 +16,9 @@ class WebStreamHandler:
             "objects": []
         }
         self.is_running = False
+        self.is_paused = False
+        self.custom_obstacles = []
+        self._next_obstacle_id = 900
 
     def update_frame(self, frame):
         with self.frame_lock:
@@ -31,6 +35,28 @@ class WebStreamHandler:
     def get_telemetry(self):
         with self.telemetry_lock:
             return self.latest_telemetry
+
+    def add_custom_obstacle(self, class_name="car", distance=10.0, lateral_pos=0.0, velocity=0.0):
+        with self.obstacle_lock:
+            obs = {
+                "id": self._next_obstacle_id,
+                "class_name": class_name,
+                "distance": float(distance),
+                "lateral_pos": float(lateral_pos),
+                "velocity": float(velocity),
+                "custom": True
+            }
+            self._next_obstacle_id += 1
+            self.custom_obstacles.append(obs)
+            return obs
+
+    def clear_custom_obstacles(self):
+        with self.obstacle_lock:
+            self.custom_obstacles.clear()
+
+    def get_custom_obstacles(self):
+        with self.obstacle_lock:
+            return [obs.copy() for obs in self.custom_obstacles]
 
 
 def generate_mjpeg_stream(stream_handler):
