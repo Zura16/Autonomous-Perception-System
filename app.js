@@ -3,16 +3,26 @@ let API_BASE = localStorage.getItem("perception_api_base") || "http://127.0.0.1:
 
 // Dashboard States
 let isRunning = false;
+let isPaused = false;
 let telemetryInterval = null;
 
 // UI DOM References
-const btnToggleStream = document.getElementById("btn-toggle-stream");
+const btnPlay = document.getElementById("btn-play");
+const btnPause = document.getElementById("btn-pause");
+const btnStop = document.getElementById("btn-stop");
+
+const btnAddCar = document.getElementById("btn-add-car");
+const btnAddPedestrian = document.getElementById("btn-add-pedestrian");
+const btnAddBarrier = document.getElementById("btn-add-barrier");
+const btnClearObstacles = document.getElementById("btn-clear-obstacles");
+
 const statusBadge = document.getElementById("status-badge");
 const sourceSelect = document.getElementById("source-select");
 const customSourceGroup = document.getElementById("custom-source-group");
 const customSourcePath = document.getElementById("custom-source-path");
 const depthToggle = document.getElementById("depth-toggle");
 const videoPlaceholder = document.getElementById("video-placeholder");
+const placeholderText = document.getElementById("placeholder-text");
 const hudStreamImg = document.getElementById("hud-stream-img");
 const alertsList = document.getElementById("alerts-list");
 
@@ -33,32 +43,24 @@ function initBorderGlows() {
         cards.forEach((card) => {
             const rect = card.getBoundingClientRect();
             
-            // Calculate center of the card
             const cardX = rect.left + rect.width / 2;
             const cardY = rect.top + rect.height / 2;
-            
-            // Calculate distance from mouse to card center
             const dx = e.clientX - cardX;
             const dy = e.clientY - cardY;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // Determine max distance for proximity (diagonal length of viewport)
             const maxDistance = Math.sqrt(window.innerWidth ** 2 + window.innerHeight ** 2) / 3;
             
-            // Proximity: 100 when mouse is directly on card, scale down to 0 far away
             let proximity = 100 * (1 - distance / maxDistance);
             proximity = Math.max(0, Math.min(100, proximity));
             
-            // If hovering on card, set proximity to 100
             const mouseOnCard = e.clientX >= rect.left && e.clientX <= rect.right &&
                                 e.clientY >= rect.top && e.clientY <= rect.bottom;
             if (mouseOnCard) {
                 proximity = 100;
             }
             
-            // Calculate angle of cursor relative to center
             let angle = Math.atan2(dy, dx) * (180 / Math.PI);
-            angle = (angle + 360) % 360; // normalize to 0-360
+            angle = (angle + 360) % 360;
             
             card.style.setProperty("--edge-proximity", proximity);
             card.style.setProperty("--cursor-angle", `${angle}deg`);
@@ -75,15 +77,34 @@ sourceSelect.addEventListener("change", () => {
     }
 });
 
-btnToggleStream.addEventListener("click", () => {
-    if (!isRunning) {
-        startPipeline();
-    } else {
-        stopPipeline();
-    }
+btnPlay.addEventListener("click", () => playPipeline());
+btnPause.addEventListener("click", () => pausePipeline());
+btnStop.addEventListener("click", () => stopPipeline());
+
+// Preset Obstacle Spawners
+btnAddCar.addEventListener("click", () => addObstacle("car", 10.0, 0.0, 0.0));
+btnAddPedestrian.addEventListener("click", () => addObstacle("person", 8.0, -0.8, -0.2));
+btnAddBarrier.addEventListener("click", () => addObstacle("barrier", 5.0, 0.0, 0.0));
+btnClearObstacles.addEventListener("click", () => clearObstacles());
+
+// Radar Click Handler: Place obstacle where user clicks on street radar!
+canvas.addEventListener("click", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    
+    const cx = canvas.width / 2.0;
+    const cy = canvas.height - 40.0;
+    const scaleX = canvas.width / 30.0;
+    const scaleY = 280.0 / 50.0;
+    
+    const lateral_pos = (clickX - cx) / scaleX;
+    const distance = Math.max(1.5, (cy - clickY) / scaleY);
+    
+    addObstacle("car", distance, lateral_pos, 0.0);
 });
 
-function startPipeline() {
+function playPipeline() {
     let videoSource = sourceSelect.value;
     if (videoSource === "custom") {
         videoSource = customSourcePath.value;
@@ -94,7 +115,7 @@ function startPipeline() {
     }
 
     const payload = {
-        command: "start",
+        command: "play",
         video_source: videoSource,
         use_dl_depth: depthToggle.checked
     };
@@ -106,25 +127,50 @@ function startPipeline() {
     })
     .then(res => res.json())
     .then(data => {
-        if (data.status === "started" || data.status === "running") {
+        if (data.status === "playing" || data.status === "started") {
             isRunning = true;
-            btnToggleStream.textContent = "STOP RUN";
-            btnToggleStream.className = "btn btn-active";
+            isPaused = false;
             
-            statusBadge.textContent = "ACTIVE";
+            btnPlay.disabled = true;
+            btnPause.disabled = false;
+            btnStop.disabled = false;
+            
+            statusBadge.textContent = "PLAYING";
             statusBadge.className = "badge badge-active";
             
-            // Display stream video source
             videoPlaceholder.classList.add("hidden");
-            // Cache-buster parameter to force reload the MJPEG stream
-            hudStreamImg.src = `${API_BASE}/video_feed?t=${Date.now()}`;
+            if (!hudStreamImg.src || hudStreamImg.classList.contains("hidden")) {
+                hudStreamImg.src = `${API_BASE}/video_feed?t=${Date.now()}`;
+            }
             hudStreamImg.classList.remove("hidden");
             
-            // Start polling telemetry data (every 80ms)
-            telemetryInterval = setInterval(pollTelemetry, 80);
+            if (!telemetryInterval) {
+                telemetryInterval = setInterval(pollTelemetry, 80);
+            }
         }
     })
-    .catch(err => console.error("Error starting pipeline:", err));
+    .catch(err => console.error("Error launching pipeline:", err));
+}
+
+function pausePipeline() {
+    fetch(`${API_BASE}/api/control`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "pause" })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === "paused") {
+            isPaused = true;
+            btnPlay.disabled = false;
+            btnPause.disabled = true;
+            btnStop.disabled = false;
+            
+            statusBadge.textContent = "PAUSED";
+            statusBadge.className = "badge badge-paused";
+        }
+    })
+    .catch(err => console.error("Error pausing pipeline:", err));
 }
 
 function stopPipeline() {
@@ -136,18 +182,20 @@ function stopPipeline() {
     .then(res => res.json())
     .then(data => {
         isRunning = false;
-        btnToggleStream.textContent = "START RUN";
-        btnToggleStream.className = "btn btn-primary";
+        isPaused = false;
+        
+        btnPlay.disabled = false;
+        btnPause.disabled = true;
+        btnStop.disabled = true;
         
         statusBadge.textContent = "STOPPED";
         statusBadge.className = "badge badge-inactive";
         
-        // Hide stream image
         hudStreamImg.src = "";
         hudStreamImg.classList.add("hidden");
+        if (placeholderText) placeholderText.textContent = "PIPELINE OFFLINE";
         videoPlaceholder.classList.remove("hidden");
         
-        // Clear telemetry polling
         if (telemetryInterval) {
             clearInterval(telemetryInterval);
             telemetryInterval = null;
@@ -156,6 +204,42 @@ function stopPipeline() {
         resetTelemetryUI();
     })
     .catch(err => console.error("Error stopping pipeline:", err));
+}
+
+function addObstacle(className, distance, lateralPos, velocity = 0.0) {
+    fetch(`${API_BASE}/api/obstacles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            class_name: className,
+            distance: distance,
+            lateral_pos: lateralPos,
+            velocity: velocity
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        console.log("Custom obstacle spawned:", data);
+        if (!isRunning) {
+            // Force telemetry poll once so radar renders obstacle even if stopped
+            pollTelemetry();
+        }
+    })
+    .catch(err => console.error("Error adding obstacle:", err));
+}
+
+function clearObstacles() {
+    fetch(`${API_BASE}/api/obstacles`, {
+        method: "DELETE"
+    })
+    .then(res => res.json())
+    .then(data => {
+        console.log("Obstacles cleared:", data);
+        if (!isRunning) {
+            pollTelemetry();
+        }
+    })
+    .catch(err => console.error("Error clearing obstacles:", err));
 }
 
 function resetTelemetryUI() {
