@@ -66,8 +66,8 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 7. **The decision layer is evaluated as a detector, never demoed.** FCW/AEB-request logic reports true-positive rate **and false positives per hour of video**, at a named TTC threshold. FP rate is the number that matters: a phantom brake at highway speed is itself the crash.
 8. **Trackers are measured, not eyeballed.** Report MOTA / IDF1 / ID-switches, and land a SORT comparison. "The boxes look stable" is not a result.
 9. **Lane detection ships with its failure set.** Those frames go into `failure-modes.md` with images; the departure metric is scored on a labeled set, never one hand-picked clip.
-10. **No number without its context.** Every latency row carries hardware, resolution, batch size, N frames, warmup excluded, and **p50/p95/p99**. Every accuracy row carries dataset, split, and N.
-11. **Every speedup names its baseline** and records the full ladder with a **paired accuracy delta** on the same split.
+10. **No number without its context, and latency is always against the budget.** Every latency row carries hardware, resolution, batch size, N frames, warmup excluded, and **p50/p95/p99** — reported against the named budget of **103.56 ms/frame** (the measured 9.657 Hz sensor rate). "Real-time" with no denominator is marketing. Every accuracy row carries dataset, split, and N.
+11. **Optimization is conditional on missing the budget, and every speedup names its baseline.** No optimization work begins until a stage is *measured* to exceed its share of 103.56 ms — optimizing a stage that already fits is theatre ([D-012](docs/decisions.md)). If it does begin: the full ladder is recorded, every rung with a **paired accuracy delta** on the same split, and a speedup reported without its accuracy cost is an unfinished experiment. **Async dispatch must be synchronized before the clock stops** (`torch.mps.synchronize()` here, `cudaEventSynchronize` elsewhere) — timing an async launch measures the dispatch, not the work.
 12. **Claims are generated, never authored.** `docs/claims.md` rows are written *from* `benchmarks.md`, each pinned to a commit hash.
 13. **Scope language is fixed.** "Monocular." "Warning and AEB request." "Offline, open-loop." Never "sensor fusion," never "commands braking," never "real-time" without a named budget.
 14. **Ground truth is never assumed valid.** Every GT value carries a tier and a coverage figure. A box you cannot see into has **no** ground truth — abstaining is required, filling it in is a fabricated measurement. *(Measured: a naive estimator on fully-occluded boxes reports the occluder, MAE 11.9 m — [D-010](docs/decisions.md).)*
@@ -94,7 +94,8 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | rect0 → cam2 offset | `[+0.0598, −0.0004, +0.0027] m` (z ≈ 0 ⇒ depths interchangeable) |
 | Frame rate | **9.657 Hz** (dt = 103.56 ms ± 0.06), measured — *not* the documented 10 Hz ([D-006](docs/decisions.md)) |
 | `range_m` convention | Longitudinal, **near face** ([D-003](docs/decisions.md)). Centroid runs **+2.03 m** farther |
-| Hardware | Apple M2, macOS (darwin 25.5), Python 3.12.4. **No CUDA** — MPS or CPU |
+| Hardware | Apple M2 (4 P-core + 4 E-core), macOS 26.5.1, Python 3.12.4. **No CUDA** — MPS or CPU |
+| **Latency budget (sensor rate)** | **103.56 ms/frame** = 9.657 Hz. The denominator for every latency row ([D-012](docs/decisions.md)) |
 | **GT ruler** (`shrink_p20`, usable tier) | MAE **0.13 m**, bias +0.09, p95 0.37 · by bin **0.05 / 0.08 / 0.15 / 0.18 / 0.22 m** |
 | GT coverage | **64%** of labelled boxes are groundtruthable; **85%** of those yield a measurement |
 | Detection mAP (model + input size) | TBD |
@@ -145,7 +146,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 - [x] **Phase 0 — Repo + dataset + one frame.** KITTI loader, calibration parsed, one frame rendered with boxes. Environment fingerprinted.
 - [x] **Phase 1 — Ground truth harness.** Project LiDAR into the image; per-detection GT range, with the ruler's own error and coverage characterised by range bin.
-- [ ] **Phase 2 — Detection baseline.** YOLOv8, mAP on the split, latency ladder. No optimization yet.
+- [ ] **Phase 2 — Detection baseline.** YOLOv8, mAP on val, and per-stage latency p50/p95/p99 **against the 103.56 ms sensor budget**. No optimization — that is gated on measuring a miss ([D-012](docs/decisions.md)).
 - [ ] **Phase 3 — Monocular range + error-vs-range curve.** Pitch handling decided and justified. **This curve is the headline artifact of the whole project.**
 - [ ] **Phase 4 — Tracking.** IoU baseline → SORT. MOTA/IDF1/ID-switches for both, honestly compared.
 - [ ] **Phase 5 — Closing speed + TTC.** Scale-rate estimator, KF over image-plane state, deadband. Validate on synthetic constant-velocity sequences first, then real data.
@@ -158,7 +159,9 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 1 COMPLETE** (2026-09-01). Phase 0 ✅. **Next: Phase 2 — detection baseline** (YOLOv8 mAP on val + latency ladder on M2). The v1 demo pipeline is archived in `legacy/` and is *not* a baseline ([D-008](docs/decisions.md)).
+- **Phase:** **Phase 1 COMPLETE** (2026-09-01). Phase 0 ✅. The v1 demo is archived in `legacy/` and is *not* a baseline ([D-008](docs/decisions.md)).
+- **NEXT SESSION — start here.** Two things, in order: **(1)** re-run `python tools/build_range_gt.py --split val` — the 0.13 m ruler figure is currently **one dev drive**, and the 64% coverage number in particular will move on val. Update Rows 1.1–1.4 in `benchmarks.md` before quoting them anywhere. **(2)** Phase 2 — YOLOv8 detection baseline: mAP on val + per-stage p50/p95/p99 **against the 103.56 ms sensor budget** ([D-012](docs/decisions.md)). No optimization unless something is measured to miss.
+- **Dataset state:** dev + `0059` + `0056` + `0027` on disk; `0084` and `0091` were still downloading at session end — run `python tools/fetch_kitti.py --check` before trusting a val number. Test drives (`0009`, `0015`) not fetched, by design.
 - **Verified:** projection chain confirmed by overlay + 11 closed-form tests · **38 tests, ruff + black clean** · dev split ruler characterised end to end.
 - **The ruler (Phase 1 headline).** `shrink_p20`, usable tier: MAE **0.13 m**, bias +0.09 m, p95 0.37 m; by bin **0.05 / 0.08 / 0.15 / 0.18 / 0.22 m** across 0–10 → 50+ m. Coverage: **64%** of labelled boxes are groundtruthable at all, **85%** of those yield a measurement. That 0.13 m is the floor under every range number this project will ever report — roughly **20× tighter** than the monocular error Phase 3 expects to find, which is what makes it usable as a ruler.
 - **Negative result banked** ([D-011](docs/decisions.md)): an adaptive shrink fallback raised coverage 86% → 100% and the recovered boxes carried **12× the error** (1.56 m vs 0.13 m), poisoning a whole range bin. Reverted; abstention is now enforced by a test.

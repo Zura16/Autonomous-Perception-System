@@ -35,4 +35,5 @@ Kept here because the tempting overstatement is more dangerous than the gap.
 | "Accurate to ±X m" (single figure) | Forbidden by hard rule 2 — error must be binned by range. |
 | Any tracking number "vs KITTI leaderboard" | Raw tracklets, not the official tracking split ([D-004](decisions.md)). |
 | Anything about detection, TTC, or FCW | Not built. Phases 2–7. |
-| "TensorRT / INT8 speedup" | No CUDA on this hardware. Not reproducible here. |
+| "TensorRT / INT8 speedup" | No CUDA on this hardware; ladder dropped as inherited scope ([D-012](decisions.md)). |
+| "Optimized inference by Nx" | No optimization performed. It is gated on a measured budget miss, and nothing has been measured yet. |

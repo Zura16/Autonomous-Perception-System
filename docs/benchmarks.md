@@ -23,10 +23,17 @@ latency number**; accuracy rows survive a hardware change but not a split change
 | numpy / opencv / torch | 2.5.1 / 5.0.0 / 2.13.0 |
 | Recorded at commit | `da10a46` (Phase 0/1 work follows) |
 
-**Consequence to state plainly:** the charter's TensorRT precision ladder
-(FP32 → FP16 → INT8) is **not reproducible on this machine**. Any such claim
-would require hardware this project does not have. Latency work here is
-CPU/MPS on an M2 and will be labelled as such.
+**Latency budget: 103.56 ms/frame** (the measured 9.657 Hz sensor rate). Every
+latency row is reported against this denominator; "real-time" without it is
+marketing.
+
+**Consequence to state plainly:** the TensorRT precision ladder
+(FP32 → FP16 → INT8) is **not reproducible on this machine** and has been
+dropped as inherited scope from the superseded FuseTrack charter
+([D-012](decisions.md)). Optimization is gated on a *measured* budget miss.
+Latency work here is CPU/MPS on an M2 and will be labelled as such — with
+`torch.mps.synchronize()` before the clock stops, since timing an async
+dispatch measures the launch, not the work.
 
 ---
 
@@ -172,11 +179,12 @@ failure mode this file exists to prevent.
 
 | Row | Blocks on |
 |---|---|
-| 2.x — Detection mAP + latency ladder (M2/MPS) | Phase 2 |
+| 2.x — Detection mAP (val) | Phase 2 |
+| 2.y — Per-stage latency p50/p95/p99 vs the 103.56 ms budget (M2/MPS) | Phase 2 |
 | 3.x — **Monocular range error vs range** ← headline | Phase 3 |
 | 3.y — Credible operating envelope (range where error < X%) | Phase 3 |
 | 4.x — Tracking MOTA / IDF1 / ID-switches, IoU vs SORT | Phase 4 |
 | 5.x — Closing-speed error; TTC error at TTC < 3 s | Phase 5 |
 | 6.x — Lane departure detection rate / FP rate | Phase 6 |
 | 7.x — FCW TPR and **FP per hour** at a named TTC threshold | Phase 7 |
-| 8.x — Per-stage latency p50/p95/p99 | Phase 8 |
+| 8.x — End-to-end latency p50/p95/p99 vs budget | Phase 8 |

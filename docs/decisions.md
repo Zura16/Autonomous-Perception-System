@@ -295,6 +295,68 @@ the artefact gets worse. This is the same failure as the occlusion case in
 
 ---
 
+## D-012 · Latency is measured against the sensor budget; the precision ladder is dropped · 2026-09-01 · Active
+
+**Decision.** Phase 2 reports per-stage latency **p50/p95/p99 against a named
+budget of 103.56 ms/frame** (the measured 9.657 Hz sensor rate). The charter's
+TensorRT precision ladder (FP32 → FP16 → INT8) is **not** performed. Optimization
+of any kind is gated on a measured budget miss.
+
+**Why the ladder goes.** Two independent reasons, either sufficient:
+
+1. **It is inherited scope.** The ladder came from the superseded FuseTrack
+   charter (`docs/archive/`) — a C++/CUDA/TensorRT camera-LiDAR fusion project.
+   APS's thesis is the monocular error-vs-range curve. Importing an optimization
+   phase to have one is how a project grows a section it cannot defend.
+2. **It is not reproducible on this hardware.** Apple M2, no CUDA. A TensorRT
+   number here would have to be borrowed, and a borrowed benchmark is not a
+   benchmark.
+
+**What replaces it, and why it is better rather than merely available.** The
+sensor rate is a *real* denominator: miss it and the system cannot keep up with
+its own input. "Real-time" against a named budget is the claim hard rule 10 was
+always reaching for; a quantization speedup chart is a proxy for it.
+
+**Optimization is gated, not forbidden.** If a stage is measured to exceed its
+share of 103.56 ms, the Apple-side ladder is available and teaches the identical
+lesson — named baseline, full ladder, paired accuracy delta on the same split:
+
+| rung | runtime |
+|---|---|
+| 1 | PyTorch FP32 CPU — the honest denominator |
+| 2 | PyTorch FP32 MPS |
+| 3 | PyTorch FP16 MPS |
+| 4 | CoreML FP16 (can target the ANE) |
+| 5 | CoreML INT8 — **weight palettization**, see the trap below |
+
+**Measurement traps that carry over from the CUDA rule.** The `cudaEventRecord`
+discipline was never about CUDA; it was about not timing the dispatch instead of
+the work.
+
+- **MPS is asynchronous.** `torch.mps.synchronize()` must be called before the
+  clock stops, exactly as `cudaEventSynchronize` would be. Same failure mode,
+  same impressively fake numbers, different API.
+- **CoreML compiles on first load** and the ANE needs warmup, so warmup exclusion
+  matters more here, not less.
+- **Thermal throttling** — the M2-specific one a desktop GPU box mostly avoids.
+  Over a long run p99 drifts, and whichever configuration is benchmarked *first*
+  looks fastest. Rungs must be interleaved round-robin rather than each run to
+  completion, and the iteration count reported.
+- **CoreML "INT8" is usually weight-only palettization.** It shrinks the model
+  and cuts memory bandwidth; activations stay float, so it often does not deliver
+  the compute speedup the name implies. Reporting it as an "INT8 speedup" would
+  be exactly the overstatement `claims.md` exists to prevent. The honest row
+  states weight quantization, the size delta, and the latency delta separately.
+
+**Interview version.** "The latency budget is set by the sensor at 9.66 Hz —
+103.6 ms. I measured per-stage p50/p95/p99 against that on an M2. I skipped the
+TensorRT ladder because there's no CUDA on that machine and, more to the point,
+optimizing a stage that already fits the budget is theatre. If something had
+missed, the Apple-side ladder is CoreML FP16 then weight-quantized INT8, each
+with a paired mAP delta — and the async-dispatch trap is the same one CUDA has."
+
+---
+
 ## Open questions
 
 | Question | Blocks | Notes |
