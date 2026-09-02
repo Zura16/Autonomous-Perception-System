@@ -15,6 +15,7 @@ from aps.groundtruth import (
     GT_RELAXED,
     GT_STRICT,
     MIN_POINTS_DEFAULT,
+    SPREAD_GATE_M,
     estimate_range,
     gt_tier,
     nearest_cluster,
@@ -136,18 +137,23 @@ def test_shrink_rejects_silhouette_background():
     depth = np.concatenate([obj_d, bg_d])
 
     assert estimate_range(uv, depth, BOX, estimator="shrink_p20").range_m == pytest.approx(30.0)
-    # The unshrunk median is dragged toward the background it should have excluded.
-    assert estimate_range(uv, depth, BOX, estimator="median").range_m > 40.0
+    # The unshrunk median is dragged toward the background it should have
+    # excluded. Gate disabled: this asserts the ESTIMATOR's behaviour, and with
+    # the gate on the two-surface box would (correctly) abstain instead.
+    dragged = estimate_range(uv, depth, BOX, estimator="median", max_spread_m=None)
+    assert dragged.range_m > 40.0
 
 
 def test_median_is_biased_far_on_a_body_with_depth_extent():
     """Why D-003 picks near-face: median reports the object's middle."""
     depth = np.linspace(20.0, 24.0, 100)  # a 4 m long car, near face at 20 m
     uv, _ = scatter(100, 0.0, inset=0.35)
-    assert estimate_range(uv, depth, BOX, estimator="median").range_m == pytest.approx(
-        22.0, abs=0.1
-    )
-    assert estimate_range(uv, depth, BOX, estimator="p20").range_m == pytest.approx(20.8, abs=0.2)
+    # Gate disabled: a uniform 4 m extent has an IQR of 2.0 m and would abstain.
+    # That is the gate working, but this test is about the estimator's bias.
+    med = estimate_range(uv, depth, BOX, estimator="median", max_spread_m=None)
+    p20 = estimate_range(uv, depth, BOX, estimator="p20", max_spread_m=None)
+    assert med.range_m == pytest.approx(22.0, abs=0.1)
+    assert p20.range_m == pytest.approx(20.8, abs=0.2)
 
 
 def test_spread_reports_internal_disagreement():
@@ -156,6 +162,52 @@ def test_spread_reports_internal_disagreement():
     deep = estimate_range(uv, np.linspace(20.0, 30.0, 200), BOX, estimator="p20")
     assert flat.spread_m == pytest.approx(0.0, abs=1e-9)
     assert deep.spread_m == pytest.approx(5.0, abs=0.2)
+
+
+def test_spread_gate_abstains_on_two_surfaces():
+    """A box holding two separated surfaces has no single answer to give.
+
+    The D-013 case: ungated, the percentile reduction returns one surface with
+    full confidence and no signal about which. Measured on val, this is what
+    turns beyond-50 m error bimodal -- median 0.12 m but MAE 4.75 m.
+    """
+    uv, _ = scatter(100, 0.0, inset=0.3)
+    near = np.full(30, 20.0)
+    far = np.full(70, 60.0)
+    depth = np.concatenate([near, far])
+
+    gated = estimate_range(uv, depth, BOX, estimator="shrink_p20")
+    assert not gated.is_valid
+    assert gated.spread_m > SPREAD_GATE_M
+
+    ungated = estimate_range(uv, depth, BOX, estimator="shrink_p20", max_spread_m=None)
+    assert ungated.is_valid
+    assert ungated.range_m == pytest.approx(20.0)
+
+
+def test_spread_gate_passes_a_single_surface_with_real_depth_extent():
+    """An obliquely-viewed vehicle spans depth legitimately and must survive.
+
+    Sized from the measured spread of boxes that are correct on val: p90 is
+    0.965 m, so a real single surface with about a metre of honest depth extent
+    must survive the gate. (p95 is 1.313 m, which is where the 1.5 m threshold
+    comes from -- it is an empirical percentile, not a geometric argument.)
+    """
+    uv, _ = scatter(100, 0.0, inset=0.3)
+    depth = np.linspace(20.0, 21.8, 100)  # IQR ~0.9 m, near the p90 of good boxes
+    gt = estimate_range(uv, depth, BOX, estimator="shrink_p20")
+    assert gt.is_valid
+    assert gt.spread_m <= SPREAD_GATE_M
+
+
+def test_spread_gate_reports_the_spread_even_when_it_abstains():
+    """An abstention must still carry its evidence, or it cannot be audited."""
+    uv, _ = scatter(100, 0.0, inset=0.3)
+    depth = np.concatenate([np.full(50, 10.0), np.full(50, 40.0)])
+    gt = estimate_range(uv, depth, BOX, estimator="shrink_p20")
+    assert not gt.is_valid
+    assert np.isfinite(gt.spread_m)
+    assert gt.n_points == 100
 
 
 def test_unknown_estimator_raises():

@@ -52,9 +52,11 @@ See [D-003](decisions.md).
 
 | Term | Meaning |
 |---|---|
-| **The ruler** | The LiDAR-derived range ground truth in `aps/groundtruth.py`. Its own error (0.13 m MAE) is the floor under every range number |
+| **The ruler** | The LiDAR-derived range ground truth in `aps/groundtruth.py`. Its own error (**0.25 m** MAE on val) is the floor under every range number |
+| **Spread gate** | Abstain when the interquartile depth spread of supporting returns exceeds 1.5 m — the signature of two surfaces in one box ([D-013](decisions.md)) |
+| **Bimodal error** | Two populations, not one distribution: beyond 50 m the ungated ruler is median 0.12 m but MAE 4.75 m. Reported with median + failure rate, never a bare mean |
 | **GT tier** | `strict` (visible, untruncated) · `relaxed` (occlusion unlabelled) · `invalid` (occluded or truncated — **no ground truth exists**) |
-| **Coverage** | Fraction of labelled objects that can be ground-truthed at all. Currently **64%** |
+| **Coverage** | Fraction of labelled objects that end with a ground-truth range. Currently **38.1%** on val |
 | **Abstention** | The estimator returning NaN rather than a low-confidence value. Counted, never filled in |
 | **Amodal box** | A label covering an object's full extent including hidden parts. KITTI 3D boxes are amodal; LiDAR returns are not — which is why truncated boxes are `invalid` |
 
@@ -105,5 +107,7 @@ See [D-003](decisions.md).
 | GT estimator | `shrink_p20` — 20th percentile of depths over the central half of the box |
 | GT shrink | 0.25 per edge, fixed. **Abstains rather than widening** ([D-011](decisions.md)) |
 | GT minimum support | 8 returns |
-| Ruler error | MAE 0.13 m · bias +0.09 m · p95 0.37 m |
-| Ego pitch excursion (dev) | 1.05° peak-to-peak, no hard braking |
+| GT spread gate | 1.5 m interquartile depth spread ([D-013](decisions.md)) |
+| Ruler error (val) | MAE 0.25 m · median 0.17 · p95 0.63 m · 0.27% failures |
+| Ego pitch excursion (val) | up to **2.22°** peak-to-peak; **+1.03° sustained mean** on `0084` |
+| Latency budget | 103.56 ms/frame ([D-012](decisions.md)) |

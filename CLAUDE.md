@@ -61,7 +61,7 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 2. **Never report a single accuracy figure for monocular range.** Report **error vs. range**, binned (0–10 / 10–20 / 20–30 / 30–50 / 50+ m), with MAE, MAPE, and spread. A lone "±2 m" headline conceals that pinhole sensitivity is worst at distance — which is exactly what a good interviewer is probing for.
 3. **Never differentiate distance to obtain velocity.** Use the scale relation `Ḋ = −D·ḣ/h` with a Kalman filter over the image-plane state, so range, closing speed, and TTC derive from one consistent state and can never contradict each other.
 4. **Phantom closing speed is a bug, not noise.** A parked vehicle must produce ≈0 closing speed. A deadband on the closing rate is mandatory, and its threshold is a logged decision with a measured false-trigger rate.
-5. **State the pitch assumption everywhere it bites.** Flat-ground contact-point geometry assumes zero camera pitch; a 2° error alone already exceeds 10% range error — and the ego vehicle pitches precisely when braking. Either estimate pitch or document the degradation with numbers. Silence is not an option. *(Measured: 1.05° peak-to-peak on a gentle city drive with no hard braking — [D-009](docs/decisions.md).)*
+5. **State the pitch assumption everywhere it bites.** Flat-ground contact-point geometry assumes zero camera pitch; a 2° error alone already exceeds 10% range error — and the ego vehicle pitches precisely when braking. Either estimate pitch or document the degradation with numbers. Silence is not an option. *(Measured on val: **2.01° and 2.22° peak-to-peak** on two of five drives, plus a sustained **+1.03° mean** on `0084` — all without hard braking. This now EXCEEDS the stated threshold and is larger than the entire GT budget; Phase 3 cannot defer it — [D-009](docs/decisions.md).)*
 6. **Object-size priors carry their variance.** A prior without a variance is a guess wearing a lab coat.
 7. **The decision layer is evaluated as a detector, never demoed.** FCW/AEB-request logic reports true-positive rate **and false positives per hour of video**, at a named TTC threshold. FP rate is the number that matters: a phantom brake at highway speed is itself the crash.
 8. **Trackers are measured, not eyeballed.** Report MOTA / IDF1 / ID-switches, and land a SORT comparison. "The boxes look stable" is not a result.
@@ -89,15 +89,16 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 |---|---|
 | Dataset | KITTI **raw**, date `2011_09_26` (not the tracking benchmark — [D-004](docs/decisions.md)) |
 | Split (by sequence — [D-002](docs/decisions.md)) | **dev** `0013` · **val** `0059` `0084` `0091` `0056` `0027` · **test** `0009` `0015` (held out) |
-| Labelled boxes | dev 385 · val ~8.7k · test unaudited by design |
+| Labelled boxes | dev 385 · val **8705** · test unaudited by design |
 | Intrinsics (cam2, rectified) | `fx = fy = 721.5377 px` · `cx = 609.5593` · `cy = 172.8540` · `1242 × 375` · HFOV **81.4°** |
 | rect0 → cam2 offset | `[+0.0598, −0.0004, +0.0027] m` (z ≈ 0 ⇒ depths interchangeable) |
 | Frame rate | **9.657 Hz** (dt = 103.56 ms ± 0.06), measured — *not* the documented 10 Hz ([D-006](docs/decisions.md)) |
 | `range_m` convention | Longitudinal, **near face** ([D-003](docs/decisions.md)). Centroid runs **+2.03 m** farther |
 | Hardware | Apple M2 (4 P-core + 4 E-core), macOS 26.5.1, Python 3.12.4. **No CUDA** — MPS or CPU |
 | **Latency budget (sensor rate)** | **103.56 ms/frame** = 9.657 Hz. The denominator for every latency row ([D-012](docs/decisions.md)) |
-| **GT ruler** (`shrink_p20`, usable tier) | MAE **0.13 m**, bias +0.09, p95 0.37 · by bin **0.05 / 0.08 / 0.15 / 0.18 / 0.22 m** |
-| GT coverage | **64%** of labelled boxes are groundtruthable; **85%** of those yield a measurement |
+| **GT ruler** (`shrink_p20` + spread gate, **val**) | MAE **0.25 m**, med 0.17, p95 0.63 · by bin **0.21 / 0.24 / 0.25 / 0.27 / 0.78 m** · failure rate 0.27% |
+| GT coverage (val) | **38.1%** of labelled boxes end with a ground-truth range (45% usable tier → 89% measured → 95% pass spread gate) |
+| Spread gate | abstain when interquartile depth spread > **1.5 m** ([D-013](docs/decisions.md)) |
 | Detection mAP (model + input size) | TBD |
 | **Range error by bin** (0–10 / 10–20 / 20–30 / 30–50 / 50+ m) | TBD / TBD / TBD / TBD / TBD |
 | **Credible operating envelope** (range where error < X%) | TBD ← *the project's headline number* |
@@ -107,7 +108,7 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Lane departure detection rate / FP rate (labeled set) | TBD |
 | FCW: TPR and **FP per hour**, at threshold TTC = TBD | TBD |
 | Per-stage latency p50/p95/p99 | TBD |
-| Test suite count | **38** |
+| Test suite count | **41** |
 
 ## Common commands (run from repo root)
 
@@ -119,7 +120,7 @@ python tools/audit_labels.py                       # label density per drive
 python tools/audit_labels.py --probe 0059 0084     # 1.5 MB probe before a 1.5 GB commit
 
 # ── Ground truth (Phase 1 — the ruler)
-python tools/build_range_gt.py --split dev         # characterise the ruler, write the table
+python tools/build_range_gt.py --split val         # characterise the ruler, write the table
 python tools/render_frame.py --drive 2011_09_26_drive_0013 --frame 20 \
     --out docs/figures/phase0_projection_check.png # standing calibration check
 
@@ -159,15 +160,14 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 1 COMPLETE** (2026-09-01). Phase 0 ✅. The v1 demo is archived in `legacy/` and is *not* a baseline ([D-008](docs/decisions.md)).
-- **NEXT SESSION — start here.** Two things, in order: **(1)** re-run `python tools/build_range_gt.py --split val` — the 0.13 m ruler figure is currently **one dev drive**, and the 64% coverage number in particular will move on val. Update Rows 1.1–1.4 in `benchmarks.md` before quoting them anywhere. **(2)** Phase 2 — YOLOv8 detection baseline: mAP on val + per-stage p50/p95/p99 **against the 103.56 ms sensor budget** ([D-012](docs/decisions.md)). No optimization unless something is measured to miss.
-- **Dataset state:** dev + `0059` + `0056` + `0027` on disk; `0084` and `0091` were still downloading at session end — run `python tools/fetch_kitti.py --check` before trusting a val number. Test drives (`0009`, `0015`) not fetched, by design.
-- **Verified:** projection chain confirmed by overlay + 11 closed-form tests · **38 tests, ruff + black clean** · dev split ruler characterised end to end.
-- **The ruler (Phase 1 headline).** `shrink_p20`, usable tier: MAE **0.13 m**, bias +0.09 m, p95 0.37 m; by bin **0.05 / 0.08 / 0.15 / 0.18 / 0.22 m** across 0–10 → 50+ m. Coverage: **64%** of labelled boxes are groundtruthable at all, **85%** of those yield a measurement. That 0.13 m is the floor under every range number this project will ever report — roughly **20× tighter** than the monocular error Phase 3 expects to find, which is what makes it usable as a ruler.
-- **Negative result banked** ([D-011](docs/decisions.md)): an adaptive shrink fallback raised coverage 86% → 100% and the recovered boxes carried **12× the error** (1.56 m vs 0.13 m), poisoning a whole range bin. Reverted; abstention is now enforced by a test.
-- **Known issues:** pitch handling still undecided (blocks Phase 3 — [D-009](docs/decisions.md)) · `0027` has only 69 labelled boxes and cannot carry a binned number alone · no CUDA on this machine, so the TensorRT-style latency ladder in the charter is not reproducible here · test split deliberately unaudited.
-- **Open decisions:** see the table at the foot of [decisions.md](docs/decisions.md) — pitch estimation vs characterisation, contact-point vs class-size prior, TTC threshold and deadband.
-- **Standing warning:** draft resume bullets exist describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo**. That is not this system and shares no component with it. Claims get generated from `benchmarks.md` in Phase 9.
+- **Phase:** **Phase 1 COMPLETE and re-verified on val** (2026-09-02). Phase 0 ✅. **Next: Phase 2 — detection baseline.** The v1 demo in `legacy/` is *not* a baseline ([D-008](docs/decisions.md)).
+- **The ruler (val, N=8705).** `shrink_p20` + spread gate: MAE **0.25 m**, median 0.17, p95 0.63, residual failure rate **0.27%**; by bin **0.21 / 0.24 / 0.25 / 0.27 / 0.78 m**. Ground truth reaches **38.1%** of labelled objects — so every range number this project reports is measured on the unoccluded, untruncated, unambiguous subset and is a **lower bound**.
+- **Val overturned three dev figures.** Coverage 64% → **45%** usable · ruler MAE 0.13 → **0.25 m** · and the 50+ m bin was revealed as **bimodal** (median 0.12 m but MAE 4.75 m, 14% of boxes over 5 m error) where dev's ten-box sample had shown a clean 0.22 m. The spread gate ([D-013](docs/decisions.md)) fixes it: 50+ goes to MAE 0.78 / p95 0.53.
+- **Pitch is now a measured problem, not a projected one.** Val drives reach **2.01°** and **2.22°** peak-to-peak — above the 2° / >10%-range-error threshold — with no hard braking, and `0084` carries a **sustained +1.03° mean** (a systematic bias, not noise). This is larger than the entire 0.25 m GT budget. **Phase 3 must decide pitch handling before the error-vs-range curve, not after.**
+- **Verified:** 41 tests, ruff + black clean. Detector smoke-tested: YOLOv8n **12.4 ms MPS / 28.0 ms CPU** per frame — already inside the 103.56 ms budget before any optimisation.
+- **Known issues:** `0027` has 69 boxes and cannot carry a binned number alone · no CUDA, so no TensorRT ladder ([D-012](docs/decisions.md)) · test split deliberately unaudited · GT beyond 50 m rests on 61 gated boxes.
+- **Open decisions:** pitch estimation vs characterisation (**now urgent**) · contact-point vs class-size prior · COCO→KITTI class mapping for Phase 2 · TTC threshold and deadband. See the table at the foot of [decisions.md](docs/decisions.md).
+- **Standing warning:** draft resume bullets exist describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo**. That is not this system. Claims get generated from `benchmarks.md` in Phase 9.
 
 ## Project skills (slash commands)
 

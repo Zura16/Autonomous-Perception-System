@@ -47,34 +47,57 @@ camera and reducing the returns inside each 2D box to a near-surface range.
 
 ![LiDAR projected into the camera, with labelled 3D boxes](docs/figures/phase0_projection_check.png)
 
-**The ruler's own error, measured against independent human 3D annotations:**
+**The ruler's own error, measured on val (8705 boxes, 5 drives) against
+independent human 3D annotations:**
 
 | range bin | 0–10 m | 10–20 m | 20–30 m | 30–50 m | 50+ m |
 |---|---|---|---|---|---|
-| MAE | 0.05 m | 0.08 m | 0.15 m | 0.18 m | 0.22 m |
+| MAE | 0.21 m | 0.24 m | 0.25 m | 0.27 m | 0.78 m |
 
-Overall MAE **0.13 m**, p95 error 0.37 m — roughly 20× tighter than the monocular
-error Phase 3 expects to find, which is what makes it usable as a ruler.
+Overall MAE **0.25 m**, median 0.17, p95 0.63, residual failure rate 0.27% —
+roughly 10× tighter than the monocular error Phase 3 expects to find, which is
+what makes it usable as a ruler.
 
-**Three findings that shaped everything downstream:**
+**Findings that shaped everything downstream:**
 
 1. **Occluded objects have no ground truth.** Scored naively across all labelled
    boxes, the "ruler" had 3.19 m MAE. Split by the annotator's occlusion flag:
    0.10 m on visible objects, **11.86 m on fully-occluded ones** — because a box
    around an object you cannot see contains the *occluder's* surface, so the
    estimator confidently measures the wrong car. Those boxes are now abstentions.
-   Consequence: ground truth exists for **64%** of labelled objects, and every
+   Consequence: ground truth reaches only **38%** of labelled objects, and every
    range number this project reports is measured on unoccluded, untruncated
    objects and is therefore a **lower bound** on real-world error.
 
 2. **Coverage is not a quality metric.** An adaptive fallback that raised the
    estimator's validity from 86% to 100% recovered boxes carrying **12× the
-   error** (1.56 m vs 0.13 m); four of them degraded a whole range bin by 4.5×.
+   error** (1.56 m vs 0.13 m on dev); four of them degraded a whole range bin
+   by 4.5×.
    Reverted, and a regression test now fails if it comes back.
 
 3. **KITTI is not 10 Hz.** Measured frame interval is 103.56 ms — **9.657 Hz**.
    Hard-coding the documented rate would put a 3.4% systematic error into every
    closing-speed and TTC figure, indistinguishable afterwards from estimator bias.
+
+4. **Beyond 50 m the ruler's error is bimodal, not merely larger.** Median error
+   0.12 m but *mean* 4.75 m: 83% of boxes under 1 m, 14% over 5 m, worst 66 m.
+   A mean over that mixture describes neither population. The cause is two
+   surfaces inside one box, and it is detectable from the depth spread alone —
+   gating on it cuts overall MAE from 0.41 m to 0.25 m and the failure rate from
+   1.06% to 0.27%, at a cost of 5% of measurements.
+
+5. **Ego pitch reaches 2.2° on ordinary city driving**, above the level that
+   costs >10% range error, with no hard braking anywhere in the data — and one
+   drive carries a *sustained* +1.03° offset, which is a systematic range bias
+   rather than noise. This is two orders of magnitude larger than the ground-truth
+   budget, and it is why Phase 3 has to settle pitch handling before producing an
+   error-vs-range curve.
+
+**A methodological note.** Phase 1 was first characterised on a single dev drive
+and looked cleaner: 64% coverage, 0.13 m MAE, 0.22 m at 50+. Re-running on val
+before quoting those anywhere overturned all three — the far-range figure had
+rested on ten boxes. The dev numbers are kept in `benchmarks.md` marked
+superseded, because the gap between them is the point.
 
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
@@ -88,7 +111,7 @@ pip install -e ".[dev]"
 python tools/fetch_kitti.py --split dev val   # ~4 GB, resumable, prunes unused sensors
 python tools/fetch_kitti.py --check           # verify
 
-python tools/build_range_gt.py --split dev    # characterise the ruler
+python tools/build_range_gt.py --split val    # characterise the ruler
 python -m pytest tests/ && ruff check . && black --check .
 ```
 
@@ -100,12 +123,12 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | Path | |
 |---|---|
 | `aps/kitti/` | Calibration, drive loading, tracklet labels |
-| `aps/groundtruth.py` | The ruler: LiDAR-in-box range, validity tiers |
+| `aps/groundtruth.py` | The ruler: LiDAR-in-box range, validity tiers, spread gate |
 | `aps/viz.py` | Debug rendering (not the HUD — that is Phase 8) |
 | `tools/` | Dataset fetch, label audit, GT build, frame render |
 | `configs/dataset.yaml` | The split. Changing it invalidates every benchmark row |
 | `docs/` | Benchmarks, decisions, error budget, glossary, history |
-| `tests/` | Closed-form geometry cases; 38 tests |
+| `tests/` | Closed-form geometry cases; 41 tests |
 | `legacy/` | The v1 demo, archived. **Not a baseline** — see below |
 
 ## About `legacy/`

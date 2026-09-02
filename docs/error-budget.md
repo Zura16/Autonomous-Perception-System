@@ -18,23 +18,31 @@ Nothing downstream can be measured more precisely than the ruler measuring it.
 
 | | |
 |---|---|
-| Estimator | `shrink_p20` on projected LiDAR |
-| MAE | **0.13 m** (bias +0.09, p95 0.37) |
-| By bin | 0.05 / 0.08 / 0.15 / 0.18 / 0.22 m |
-| Coverage | 64% of labelled objects groundtruthable; 85% of those measured |
+| Estimator | `shrink_p20` + spread gate, on projected LiDAR |
+| MAE | **0.25 m** (median 0.17, p95 0.63) — **val**, N=3315 |
+| By bin | 0.21 / 0.24 / 0.25 / 0.27 / **0.78** m |
+| Residual failure rate | 0.27% at \|e\| > 5 m |
+| Coverage | **38.1%** of labelled objects end with a ground-truth range |
 
-**Usable because it is ~20× tighter than the monocular error Phase 3 expects.**
-If a monocular estimator ever reports errors approaching 0.13 m, that number is
+**Usable because it is ~10× tighter than the monocular error Phase 3 expects.**
+If a monocular estimator ever reports errors approaching 0.25 m, that number is
 measuring the ruler, not the estimator, and must be reported as a floor.
 
-**Two structural limits, not noise:**
+**Beyond 50 m the ruler is weakest exactly where it matters.** The 50+ bin
+retains only 73% of measured boxes after gating and lands at 0.78 m — three times
+the near-field figure, on 61 boxes. Any operating-envelope claim past 50 m rests
+on that thin evidence and must say so.
+
+**Three structural limits, not noise:**
 
 - **Occlusion.** No ground truth exists for occluded objects; the box contains
   the occluder (MAE 11.86 m if you try). Every range number is therefore measured
   on the *visible, untruncated* subset and is a **lower bound** on real-world
   error ([D-010](decisions.md)).
-- **Support falls as ~1/range².** 1887 returns per box at 0–10 m, 24 at 50+ m.
-  The ruler weakens exactly where the estimator it measures weakens.
+- **Support falls as ~1/range².** 1568 returns per box at 0–10 m, 22 at 50+ m
+  (val). The ruler weakens exactly where the estimator it measures weakens.
+- **Ambiguity.** A box holding two surfaces has no single answer; the spread gate
+  abstains on 5% of measured boxes, rising to 27% at 50+ m ([D-013](decisions.md)).
 
 ---
 
@@ -88,13 +96,27 @@ displaces the apparent contact row, and for a camera at height `H_cam` the range
 error is approximately `δD/D ≈ D·θ/H_cam` for small `θ` — i.e. **pitch error also
 grows with range.**
 
-**Measured (dev split, [D-009](decisions.md)):** ego pitch mean +0.250°, range
-−0.253° … +0.794°, **peak-to-peak 1.05°** — on a gentle city drive **containing
-no hard braking**.
+**Measured on val ([D-009](decisions.md)) — this exceeds the threshold:**
 
-The charter's stated sensitivity is that **2° alone exceeds 10% range error**. So
-a 1.05° excursion on easy data is already material, and the ego vehicle pitches
-*most* during exactly the braking manoeuvre an FCW system exists for.
+| drive | mean | peak-to-peak |
+|---|---|---|
+| 0059 | −0.257° | 1.117° |
+| **0084** | **+1.026°** | **2.011°** |
+| **0091** | +0.423° | **2.221°** |
+| 0056 | +0.425° | 1.126° |
+| 0027 | +0.390° | 0.471° |
+
+The charter's stated sensitivity is that **2° alone exceeds 10% range error**.
+Two of five val drives *reach or exceed* that, on ordinary city driving with **no
+hard braking** — and the ego vehicle pitches most during exactly the braking
+manoeuvre an FCW system exists for.
+
+`0084`'s **sustained +1.026° mean** is the more dangerous number: a standing
+offset across a whole drive is a systematic range bias, not an excursion, and no
+temporal filter removes it. At 30 m with a 1.65 m camera height, ~1° of
+uncorrected pitch is on the order of a 30% range error — **two orders of
+magnitude larger than the 0.25 m ground-truth budget.** Dev's 1.05° understated
+this.
 
 **Not yet corrected, and deliberately so.** OXTS reports *vehicle* pitch in the
 navigation frame; the geometry needs *camera* pitch relative to the local road

@@ -79,96 +79,156 @@ error, and it is the floor under every range number this project will report.
 labelled box, reduce to a near-surface range, compare to the labelled 3D box's
 near face ([D-003](decisions.md)).
 
-### Row 1.1 — Estimator selection, dev split
+> **Rows 1.1–1.5 are VAL** (N = 8705 boxes, 5 drives). The dev-only figures
+> reported on 2026-09-01 are superseded and kept at the foot of this section:
+> dev is one quiet drive and its far-range sample was 10 boxes, which made the
+> 50+ m bin look four times better than it is.
 
-- **Data:** dev split (`2011_09_26_drive_0013`), 144 frames, 385 labelled boxes
-- **Subset:** usable GT tier (strict + relaxed), N = 248 boxes
+### Row 1.1 — Estimator selection, val split
+
+- **Data:** val split, 5 drives, 1518 labelled frames, 8705 labelled boxes
+- **Subset:** usable GT tier (strict + relaxed), measured, **ungated**, N = 3505
 - **Metric:** absolute error vs labelled 3D box near face, metres
-- **Commit:** *(this commit)*
 
 | estimator | valid | MAE | bias | p95 \|e\| | 0–10 | 10–20 | 20–30 | 30–50 | 50+ |
 |---|---|---|---|---|---|---|---|---|---|
-| `min` | 99% | 2.08 | −2.02 | 14.44 | 0.14 | 0.34 | 0.83 | 3.57 | 6.38 |
-| `p10` | 99% | 0.81 | −0.61 | 2.27 | 0.07 | 0.09 | 0.33 | 1.35 | 2.74 |
-| `p20` | 99% | 0.41 | +0.03 | 0.69 | 0.23 | 0.13 | 0.36 | 0.52 | 1.11 |
-| `median` | 99% | 1.64 | +1.63 | 5.78 | 2.81 | 0.69 | 1.54 | 1.75 | 2.28 |
-| **`shrink_p20`** ← selected | **85%** | **0.13** | **+0.09** | **0.37** | **0.05** | **0.08** | **0.15** | **0.18** | **0.22** |
-| `cluster_p20` | 98% | 1.05 | −0.75 | 7.82 | 0.19 | 0.11 | 0.24 | 2.24 | 1.92 |
+| `min` | 98% | 1.53 | −1.44 | 8.11 | 0.29 | 0.53 | 1.01 | 1.81 | 9.56 |
+| `p10` | 98% | 0.94 | −0.55 | 1.10 | 0.24 | 0.27 | 0.38 | 0.80 | 7.69 |
+| `p20` | 98% | 0.86 | −0.28 | 0.98 | 0.34 | 0.36 | 0.40 | 0.66 | 6.31 |
+| `median` | 98% | 1.55 | +0.98 | 4.35 | 1.28 | 1.45 | 1.27 | 1.31 | 4.21 |
+| **`shrink_p20`** ← selected | **89%** | **0.41** | **+0.04** | **0.75** | **0.24** | **0.27** | **0.33** | **0.39** | 4.75 |
+| `cluster_p20` | 95% | 0.83 | −0.32 | 1.20 | 0.36 | 0.47 | 0.51 | 0.84 | 5.43 |
 
-**Reading it.** `shrink_p20` wins at every range bin, not on average — the
-distinction hard rule 2 exists to enforce. It is the only estimator whose error
-stays flat with range; `min` and `cluster_p20` degrade 30–45× from the near bin
-to the far one, because at distance a thin foreground object (pole, sign, mirror)
-supplies the nearest returns in the box.
+`shrink_p20` wins in every bin to 50 m, and abstains most (89% vs 95–98%) —
+the trade bought deliberately. **Every estimator collapses beyond 50 m**, which
+Row 1.3 explains and Row 1.6 fixes.
 
-**It also abstains most** (85% valid vs 98–99%). That is the trade being bought
-deliberately: see Row 1.3.
-
-### Row 1.2 — Ground-truth coverage, dev split
+### Row 1.2 — Ground-truth coverage, val split
 
 What fraction of labelled objects can be ground-truthed **at all**.
 
 | bin (m) | labels | strict | relaxed | invalid | usable | median LiDAR pts/box |
 |---|---|---|---|---|---|---|
-| 0–10 | 54 | 30 | 0 | 24 | 56% | 1887 |
-| 10–20 | 58 | 57 | 0 | 1 | 98% | 580 |
-| 20–30 | 102 | 47 | 3 | 52 | 49% | 144 |
-| 30–50 | 130 | 59 | 29 | 42 | 68% | 74 |
-| 50+ | 41 | 0 | 23 | 18 | 56% | 24 |
-| **all** | **385** | **193** | **55** | **137** | **64%** | |
+| 0–10 | 1184 | 484 | 0 | 700 | 41% | 1568 |
+| 10–20 | 2162 | 1320 | 4 | 838 | 61% | 506 |
+| 20–30 | 1877 | 974 | 14 | 889 | 53% | 217 |
+| 30–50 | 2381 | 756 | 4 | 1621 | 32% | 82 |
+| 50+ | 1101 | 355 | 11 | 735 | 33% | 22 |
+| **all** | **8705** | **3889** | **33** | **4783** | **45%** | |
 
-Ruler error by tier (same estimator, dev split):
+**Coverage is 45% on val, against 64% on dev** — val's city drives are denser and
+more occluded. The full chain to a usable ground-truth value:
 
-| tier | N | MAE |
-|---|---|---|
-| strict — annotator says fully visible | 227 | **0.10 m** |
-| relaxed — occlusion unlabelled | 33 | 0.28 m |
-| *(excluded)* partly occluded | 22 | 1.33 m |
-| *(excluded)* fully occluded | 79 | **11.86 m** |
+```
+8705 labelled boxes
+ → 3922 usable tier (45%)          occlusion/truncation gate, D-010
+ → 3505 measured (>= 8 returns)
+ → 3315 pass the spread gate       D-013
+ = 38.1% of labelled objects receive a ground-truth range
+```
 
 **The caveat that travels with every range number in this project:** ground truth
-exists for 64% of labelled objects, and those are the *unoccluded, untruncated*
-ones. Every reported range error is therefore measured on the easy half and is a
-**lower bound** on real-world error ([D-010](decisions.md)).
+exists for **38%** of labelled objects, and those are the unoccluded, untruncated,
+unambiguous ones. Every reported range error is measured on the easy subset and
+is a **lower bound** on real-world error.
 
-LiDAR support also falls ~1/range² — from 1887 returns per box at 0–10 m to 24 at
-50+ m. The ruler weakens exactly where the monocular estimator it will measure
-also weakens.
+### Row 1.3 — Beyond 50 m the error is bimodal, not merely larger
 
-### Row 1.3 — Negative result: coverage bought at 12× the error
+Ungated `shrink_p20`, val, 50+ m bin, N = 84:
 
-Adaptive shrink fallback (0.25 → 0.125 → 0.0), dev split, usable tier.
+| statistic | value |
+|---|---|
+| median \|e\| | **0.12 m** |
+| MAE | **4.75 m** |
+| p90 \|e\| | 14.44 m |
+| p99 \|e\| | 65.99 m |
+| \|e\| < 1 m | 83% |
+| \|e\| > 5 m | **14%** |
 
-| shrink used | N | MAE | p95 \|e\| |
-|---|---|---|---|
-| 0.25 (no fallback needed) | 212 | **0.130** | 0.37 |
-| 0.125 (fallback) | 25 | **1.563** | 11.15 |
-| 0.0 (fallback) | 9 | 0.481 | 1.81 |
-
-Validity rose 86% → 100%; the 20–30 m bin degraded 0.15 m → 0.69 m on the
-strength of **four** recovered boxes. Reverted ([D-011](decisions.md)), and a
-regression test now fails if the fallback returns.
+Mostly excellent, occasionally catastrophic — two populations, not one
+distribution. **A mean over that mixture describes neither**, which is why
+median and failure rate are now reported alongside MAE everywhere.
 
 ### Row 1.4 — Convention gap, measured
 
-| quantity | dev split |
+| quantity | val |
 |---|---|
-| centroid range − near-face range | mean **+2.03 m** (p05 1.79, p95 2.69) |
+| centroid range − near-face range | mean **+1.70 m** (p05 0.37, p95 2.42) |
 
 Scoring a near-face estimator against centroid truth would manufacture exactly
 this as a pure bias and then attribute it to the geometry ([D-003](decisions.md)).
 
-### Row 1.5 — Ego pitch excursion, dev split
+### Row 1.5 — Ego pitch excursion, val split
 
-| | |
-|---|---|
-| mean | +0.250° |
-| range | −0.253° … +0.794° |
-| **peak-to-peak** | **1.05°** |
+Sampled every 5th frame. **This supersedes the dev figure and changes the
+conclusion.**
 
-On a gentle city drive **containing no hard braking**. Against the stated
-sensitivity (2° ≈ >10% range error), this is already a material term before the
-manoeuvre an FCW system exists for ([D-009](decisions.md)).
+| drive | mean | min | max | peak-to-peak |
+|---|---|---|---|---|
+| 0059 | −0.257° | −0.838° | +0.279° | 1.117° |
+| **0084** | **+1.026°** | −0.007° | +2.004° | **2.011°** |
+| **0091** | +0.423° | −0.570° | +1.651° | **2.221°** |
+| 0056 | +0.425° | −0.105° | +1.021° | 1.126° |
+| 0027 | +0.390° | +0.179° | +0.650° | 0.471° |
+
+**Two of five val drives exceed 2° peak-to-peak** — the level the charter states
+already costs >10% range error — on ordinary city driving with **no hard
+braking**. Dev's 1.05° was not representative.
+
+`0084` additionally carries a **sustained +1.03° mean**: not an excursion but a
+standing offset across a whole drive, which would appear as a systematic range
+bias rather than as noise. Pitch is no longer a projected concern; it is a
+measured one ([D-009](decisions.md)), and Phase 3 cannot defer the decision.
+
+### Row 1.6 — The spread gate ← **the selected ground-truth configuration**
+
+Abstain when the interquartile depth spread of supporting returns exceeds
+**1.5 m** — a box whose middle half of returns spans more than that contains two
+surfaces. Threshold set at the 95th percentile of the spread distribution for
+boxes that are *correct* (p50 0.241, p90 0.965, **p95 1.313 m**), not from a
+geometric argument. The gate reads only LiDAR evidence, never the label, so it
+transfers unchanged to detector boxes in Phase 3.
+
+| bin (m) | measured | kept | keep% | MAE | med \|e\| | p95 | fail% (\|e\|>5 m) |
+|---|---|---|---|---|---|---|---|
+| 0–10 | 484 | 447 | 92% | 0.21 | 0.21 | 0.43 | 0.00% |
+| 10–20 | 1324 | 1264 | 95% | 0.24 | 0.21 | 0.62 | 0.08% |
+| 20–30 | 988 | 951 | 96% | 0.25 | 0.14 | 0.65 | 0.53% |
+| 30–50 | 625 | 592 | 95% | 0.27 | 0.15 | 0.86 | 0.34% |
+| 50+ | 84 | 61 | 73% | **0.78** | 0.11 | 0.53 | 1.64% |
+| **all** | **3505** | **3315** | **95%** | **0.25** | **0.17** | **0.63** | **0.27%** |
+
+Against ungated: MAE 0.41 → **0.25 m**, failure rate 1.06% → **0.27%**, and the
+50+ bin goes from MAE 4.75 / p95 33.79 to **MAE 0.78 / p95 0.53**. Cost: 5% of
+measured boxes, concentrated at long range (73% kept at 50+).
+
+Threshold sweep that set it (all usable val boxes, N=3505):
+
+| gate | kept | MAE | residual fail% | failures caught |
+|---|---|---|---|---|
+| none | 100% | 0.41 | 1.06% | — |
+| `spread ≤ 1.0` | 90% | 0.24 | 0.16% | 86% |
+| **`spread ≤ 1.5`** | **95%** | **0.25** | **0.27%** | **76%** |
+| `spread ≤ 2.0` | 96% | 0.28 | 0.57% | 49% |
+
+**This is the ruler:** MAE **0.25 m**, p95 0.63 m, on 38% of labelled objects.
+
+### Superseded — dev-split figures (2026-09-01)
+
+Kept so the trajectory is visible. Dev = `drive_0013`, N=385, one quiet city drive.
+
+| | dev (superseded) | val (current) |
+|---|---|---|
+| GT coverage | 64% | 45% |
+| ruler MAE | 0.13 m | 0.25 m (gated) |
+| by bin | 0.05/0.08/0.15/0.18/0.22 | 0.21/0.24/0.25/0.27/0.78 |
+| 50+ m sample | **10 boxes** | 84 boxes |
+| pitch p2p | 1.05° | up to **2.22°** |
+
+→ superseded by Rows 1.1–1.6. The dev 50+ figure of 0.22 m rested on ten boxes
+and was a small-sample artefact; val's 84 boxes exposed the bimodality that
+motivated the spread gate. **Re-running on val before quoting the dev number
+anywhere was the single most valuable step of the session.**
 
 ---
 

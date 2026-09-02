@@ -56,6 +56,42 @@ MIN_POINTS_DEFAULT = 8
 # confident wrong answers to fill a coverage column. Reverted.
 SHRINK_FRACTION = 0.25
 
+# Abstain when the interquartile depth spread of the supporting returns exceeds
+# this. A box whose middle half of returns spans more than a metre and a half
+# contains TWO SURFACES, not one -- the object and something in front of or
+# behind it -- and the percentile reduction will silently pick whichever the
+# contaminant is.
+#
+# Why a gate is needed at all (docs/decisions.md D-013). On val, ungated error
+# beyond 50 m is bimodal, not merely worse: median |error| 0.12 m but MAE
+# 4.75 m, with 83% of boxes under 1 m and 14% over 5 m (p99 = 66 m). Reporting
+# a mean over that mixture describes neither population.
+#
+# Measured sweep, all usable val boxes (N=3505, 1.06% failures at |e| > 5 m):
+#
+#     no gate     kept 100%   MAE 0.41   residual failures 1.06%
+#     spread<=1.0 kept  90%   MAE 0.24   residual failures 0.16%   (86% caught)
+#     spread<=1.5 kept  95%   MAE 0.25   residual failures 0.27%   (76% caught)
+#
+# The threshold is set from the measured spread distribution of boxes that are
+# CORRECT (|error| <= 1 m, N=3440 on val), not from a geometric argument:
+#
+#     p50 0.241   p75 0.539   p90 0.965   p95 1.313   p99 6.80   max 18.55 m
+#
+# 1.5 m sits just above the 95th percentile of that distribution, so it discards
+# 4.6% of good measurements to catch 76% of failures. Tightening to 1.0 m would
+# discard 9.4% -- double the loss -- to catch 86%. The looser threshold is
+# preferred because coverage lost here is coverage lost at long range, where the
+# project already has least data.
+#
+# Note the tail: some correct boxes have spreads up to 18 m, because the near
+# cluster happened to be the object anyway. The gate is CONSERVATIVE, not exact
+# -- it identifies boxes whose evidence is ambiguous, not boxes that are wrong.
+#
+# The gate reads only the LiDAR evidence, never the label, so it applies
+# unchanged to detector boxes at inference time where no label exists.
+SPREAD_GATE_M = 1.5
+
 
 # ── Ground-truth validity ────────────────────────────────────────────────────
 #
@@ -165,8 +201,15 @@ def estimate_range(
     box: np.ndarray,
     estimator: str = "cluster_p20",
     min_points: int = MIN_POINTS_DEFAULT,
+    max_spread_m: float | None = SPREAD_GATE_M,
 ) -> RangeGT:
     """Ground-truth range for one 2D box from projected LiDAR.
+
+    Abstains (returns NaN) when the box is too sparse to measure, or when the
+    supporting returns disagree by more than `max_spread_m` at the interquartile
+    range -- see SPREAD_GATE_M. Pass `max_spread_m=None` to disable the gate,
+    which is what the estimator-characterisation harness does so that the
+    ungated failure rate stays visible rather than being defined away.
 
     Estimators, all returning a *near-surface* range per docs/decisions.md D-003:
 
@@ -209,6 +252,10 @@ def estimate_range(
         return RangeGT(np.nan, len(d), n_in_box, np.nan, estimator, shrink)
 
     spread = float(np.percentile(d, 75) - np.percentile(d, 25))
+    if max_spread_m is not None and spread > max_spread_m:
+        # Two surfaces in one box. The percentile reduction would return one of
+        # them with full confidence and no way to tell which.
+        return RangeGT(np.nan, len(d), n_in_box, spread, estimator, shrink)
     return RangeGT(value[estimator](d), len(d), n_in_box, spread, estimator, shrink)
 
 

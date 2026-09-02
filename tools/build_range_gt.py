@@ -24,6 +24,7 @@ from aps.groundtruth import (
     GT_INVALID,
     GT_RELAXED,
     GT_STRICT,
+    SPREAD_GATE_M,
     estimate_range,
     gt_tier,
     project_frame,
@@ -51,7 +52,7 @@ def collect(split: str, max_frames: int | None) -> dict[str, np.ndarray]:
         k: []
         for k in ["drive", "frame", "track_id", "cls", "label_near_m", "label_center_m",
                   "x1", "y1", "x2", "y2", "occlusion", "truncation", "n_in_box", "tier",
-                  "shrink_used"]
+                  "shrink_used", "spread_m"]
     }  # fmt: skip
     for est in ESTIMATORS:
         rows[est] = []
@@ -87,11 +88,17 @@ def collect(split: str, max_frames: int | None) -> dict[str, np.ndarray]:
                 rows["tier"].append(gt_tier(tbox.occlusion, tbox.truncation))
                 n_in = -1
                 for est in ESTIMATORS:
-                    gt = estimate_range(uv, depth, box, estimator=est)
+                    # Characterisation runs UNGATED on purpose: the point is to
+                    # measure the raw failure rate, and applying the spread gate
+                    # here would define the failures out of existence rather
+                    # than measure how many there are. The gate is applied as a
+                    # reported layer in report(), from the recorded spread.
+                    gt = estimate_range(uv, depth, box, estimator=est, max_spread_m=None)
                     rows[est].append(gt.range_m)
                     rows[f"{est}_n"].append(gt.n_points)
                     if est == "shrink_p20":
                         rows["shrink_used"].append(gt.shrink)
+                        rows["spread_m"].append(gt.spread_m)
                     n_in = gt.n_in_box
                 rows["n_in_box"].append(n_in)
 
@@ -170,10 +177,47 @@ def report(data: dict[str, np.ndarray], split: str) -> None:
                 + "".join(_bin_cells(err, ok, idx))
             )
 
-    # ── 3. The two conventions, measured rather than asserted (D-003)
+    # ── 3. The spread gate (D-013): failures are bimodal, so report both halves
+    usable_mask = np.isin(tier, [GT_STRICT, GT_RELAXED])
+    pred = data["shrink_p20"].astype(float)
+    spread = data["spread_m"].astype(float)
+    measured = usable_mask & np.isfinite(pred)
+    err = np.abs(pred - truth)
+
+    print(f"\n[3] SPREAD GATE -- abstain when interquartile depth spread > {SPREAD_GATE_M} m")
+    print("    Beyond ~50 m the error is BIMODAL: mostly excellent, occasionally")
+    print("    catastrophic. A mean over that mixture describes neither population,")
+    print("    so median and failure rate are reported alongside MAE.")
+    hdr = (
+        f"{'bin (m)':<9}{'meas':>6}{'kept':>6}{'keep%':>7}"
+        f"{'MAE':>7}{'med|e|':>8}{'p95':>7}{'fail%':>7}   (fail = |e| > 5 m)"
+    )
+    for gated, name in [(False, "UNGATED"), (True, f"GATED spread<={SPREAD_GATE_M}")]:
+        print(f"\n  {name}")
+        print("  " + hdr)
+        for i, lab in enumerate(BIN_LABELS):
+            m = measured & (idx == i)
+            if gated:
+                m = m & (spread <= SPREAD_GATE_M)
+            base = (measured & (idx == i)).sum()
+            if not m.any():
+                continue
+            print(
+                f"  {lab:<9}{base:>6}{m.sum():>6}{100 * m.sum() / max(base, 1):>6.0f}%"
+                f"{err[m].mean():>7.2f}{np.median(err[m]):>8.2f}"
+                f"{np.percentile(err[m], 95):>7.2f}{100 * (err[m] > 5).mean():>6.2f}%"
+            )
+        m = measured & (spread <= SPREAD_GATE_M) if gated else measured
+        print(
+            f"  {'ALL':<9}{measured.sum():>6}{m.sum():>6}{100 * m.sum() / max(measured.sum(), 1):>6.0f}%"
+            f"{err[m].mean():>7.2f}{np.median(err[m]):>8.2f}"
+            f"{np.percentile(err[m], 95):>7.2f}{100 * (err[m] > 5).mean():>6.2f}%"
+        )
+
+    # ── 4. The two conventions, measured rather than asserted (D-003)
     gap = data["label_center_m"].astype(float) - truth
     print(
-        f"\n[3] D-003 -- centroid minus near face: mean {gap.mean():.2f} m "
+        f"\n[4] D-003 -- centroid minus near face: mean {gap.mean():.2f} m "
         f"(p05 {np.percentile(gap, 5):.2f}, p95 {np.percentile(gap, 95):.2f} m)."
     )
     print("    Scoring a near-face estimator against centroid truth would manufacture")

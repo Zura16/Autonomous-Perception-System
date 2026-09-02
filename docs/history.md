@@ -94,3 +94,77 @@ always correct; the misunderstanding would have surfaced later as a sign error.
 **Next:** Phase 2 — detection baseline. YOLOv8 mAP on val, latency on M2/MPS.
 Note for that phase: no CUDA on this machine, so the charter's TensorRT ladder is
 not reproducible here and must not be claimed.
+
+---
+
+## 2026-09-02 — Phase 1 re-verified on val; three dev figures overturned
+
+**The session's one instruction to itself** was written into *Current status* the
+day before: *re-run the ruler on val before quoting the dev number anywhere.*
+That turned out to be the most valuable thing done in either session.
+
+### What val changed
+
+| | dev (2026-09-01) | val (now) |
+|---|---|---|
+| N | 385 | **8705** |
+| GT coverage (usable tier) | 64% | **45%** |
+| Ruler MAE | 0.13 m | **0.25 m** (gated) |
+| 50+ m bin | 0.22 m, N=10 | bimodal, N=84 |
+| Pitch peak-to-peak | 1.05° | up to **2.22°** |
+
+All three headline dev figures were optimistic, and the far-range one was an
+artefact of a ten-box sample.
+
+### The bimodality, and the gate
+
+Ungated on val beyond 50 m: **median |error| 0.12 m but MAE 4.75 m** — 83% of
+boxes under 1 m, 14% over 5 m, worst 66 m. Two populations, not one distribution.
+Cause: a 2D box containing the object *and* something in front of it, without the
+annotator flagging occlusion.
+
+Discriminators were measured rather than guessed. Point count — the intuitive
+choice — turned out **backwards** (failures had *fewer* points, 14 vs 17 median).
+Interquartile depth spread separated the populations **47×** (0.248 m correct vs
+11.65 m failing). Threshold set at the p95 of the spread distribution for boxes
+that are *correct* (1.313 m), rounded to **1.5 m**.
+
+Result: MAE 0.41 → **0.25 m**, failure rate 1.06% → **0.27%**, and the 50+ bin
+from MAE 4.75 / p95 33.79 to **0.78 / 0.53**. Cost: 5% of measurements, 27% of
+them at long range ([D-013](decisions.md)).
+
+The gate reads only LiDAR evidence, never the label — so it transfers to detector
+boxes in Phase 3, and it avoids the circularity of gating on agreement with the
+label and then reporting that subset's agreement as accuracy. Characterisation
+therefore runs **ungated**, with the gate applied as a reported layer.
+
+**A unit test disproved my own justification.** The first draft argued 1.5 m from
+vehicle geometry — that an obliquely-viewed car legitimately spans that much
+depth. A test with a uniform 4 m extent (IQR 2.0 m) failed, showing the geometric
+story was wrong; the honest reason is the empirical percentile. The comment in
+`groundtruth.py` now says so, and records that the geometric argument was post-hoc.
+
+### Pitch stopped being hypothetical
+
+Val drives reach **2.011°** and **2.221°** peak-to-peak — at or above the level
+the charter states already costs >10% range error — on ordinary city driving with
+**no hard braking**. `0084` also carries a **sustained +1.026° mean**: a standing
+offset across a whole drive, i.e. a systematic range bias no temporal filter
+removes, and roughly two orders of magnitude larger than the 0.25 m GT budget.
+
+Phase 3 can no longer defer the pitch decision ([D-009](decisions.md)).
+
+### Also landed
+
+- Latency budget fixed at **103.56 ms/frame**; TensorRT ladder dropped as
+  inherited scope from the superseded FuseTrack charter ([D-012](decisions.md)).
+- YOLOv8n smoke-tested on a KITTI frame: **12.4 ms MPS / 28.0 ms CPU**, already
+  inside budget before any optimisation — which is itself the argument for not
+  optimising.
+- 41 tests, ruff + black clean. Every doc carrying a Phase 1 number updated;
+  dev figures retained in `benchmarks.md` marked superseded.
+
+**Next:** Phase 2 proper — detection baseline. Open question to settle first:
+the COCO→KITTI class mapping (KITTI `Van` vs COCO `car`/`truck`, and a `Cyclist`
+producing both a `person` and a `bicycle` box), plus ignore-regions for labelled
+objects outside the FCW classes so they do not score as false positives.

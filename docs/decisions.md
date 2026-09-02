@@ -198,11 +198,19 @@ grade, and the camera's mounting error, none of which OXTS observes. Feeding
 vehicle pitch into the range equation would look like a correction while
 correcting for the wrong angle.
 
-**First measurement.** `drive_0013`: mean +0.250°, range −0.253° to +0.794°,
-**peak-to-peak 1.05°**. Against the charter's stated sensitivity (2° ≈ >10% range
-error), a ~1° excursion on a gentle city drive is already a material term, and
-this drive contains no hard braking — the manoeuvre during which an FCW system is
-most needed and the ego vehicle pitches most.
+**First measurement (dev, superseded).** `drive_0013`: peak-to-peak 1.05°.
+
+**Val measurement, 2026-09-02 — this changes the conclusion.** Across five val
+drives, peak-to-peak pitch reaches **2.011° (`0084`)** and **2.221° (`0091`)** —
+*exceeding* the 2° level the charter states already costs >10% range error, on
+ordinary city driving with **no hard braking**. `0084` also carries a sustained
+**+1.026° mean**: a standing offset across an entire drive, which appears as a
+systematic range bias rather than as noise, and which no amount of temporal
+filtering removes.
+
+Dev's 1.05° was not representative. Pitch is no longer a projected concern to be
+documented; it is a measured error source larger than the entire ground-truth
+budget (0.25 m), and Phase 3 cannot defer the decision.
 
 **Open.** Phase 3 decides between (a) vanishing-point / horizon-row pitch
 estimation from the image, and (b) documenting the degradation with a measured
@@ -354,6 +362,62 @@ TensorRT ladder because there's no CUDA on that machine and, more to the point,
 optimizing a stage that already fits the budget is theatre. If something had
 missed, the Apple-side ladder is CoreML FP16 then weight-quantized INT8, each
 with a paired mAP delta — and the async-dispatch trap is the same one CUDA has."
+
+---
+
+## D-013 · Abstain when the box holds two surfaces (spread gate) · 2026-09-02 · Active
+
+**Decision.** `estimate_range` abstains when the interquartile depth spread of
+the supporting returns exceeds **1.5 m** (`SPREAD_GATE_M`). This is the selected
+ground-truth configuration.
+
+**What forced it.** On val (N=3505, vs dev's 385), error beyond 50 m turned out
+to be **bimodal rather than merely larger**: median |error| **0.12 m** but MAE
+**4.75 m**, with 83% of boxes under 1 m and 14% over 5 m (p99 = 66 m). Two
+populations, not one distribution — a mean over that mixture describes neither.
+Dev's 50+ bin had ten boxes and showed 0.22 m, a small-sample artefact that would
+have been quoted as fact had val not been run first.
+
+**Why spread, and not the obvious alternatives.** Measured discrimination between
+correct boxes and failures (|e| > 5 m):
+
+| feature | correct (median) | failure (median) | separation |
+|---|---|---|---|
+| supporting point count | 17 | 14 | 0.8× — *useless, and backwards* |
+| `median − p20` | 0.122 | 0.723 | 6× — catches only 22–39% |
+| **interquartile spread** | **0.248 m** | **11.65 m** | **47×** |
+| largest internal depth gap | 0.0 m | 13.38 m | near-total |
+
+Point count is the intuitive gate and it does not work — *more* points was
+slightly worse. The physical signature of the failure is two surfaces in one box,
+and spread measures exactly that.
+
+**Threshold, set empirically not geometrically.** From the spread distribution of
+boxes that are *correct*: p50 0.241, p75 0.539, p90 0.965, **p95 1.313 m**. 1.5 m
+sits just above that p95, discarding 4.6% of good measurements to catch 76% of
+failures. The tighter 1.0 m discards 9.4% — double — to catch 86%; the looser
+threshold wins because coverage lost here is lost at long range, where the project
+already has least data.
+
+*(An earlier draft of this rationale argued from vehicle geometry — that an
+obliquely-viewed car legitimately spans ~1.5 m of depth. A unit test disproved it:
+a uniform 4 m extent has an IQR of 2.0 m and would be rejected. The empirical
+percentile is the real justification; the geometric story was post-hoc.)*
+
+**Result.** MAE 0.41 → **0.25 m**, failure rate 1.06% → **0.27%**, and the 50+ bin
+from MAE 4.75 / p95 33.79 to **0.78 / 0.53**. Cost: 5% of measured boxes.
+
+**The gate never reads the label.** It uses only the depth distribution inside the
+box, so it applies unchanged to detector boxes in Phase 3 where no label exists.
+Gating on *agreement with the label* would have been circular — it would select
+the subset with low error and then report that subset's error as the ruler's
+accuracy. Characterisation therefore runs **ungated** in
+`tools/build_range_gt.py`, so the raw failure rate stays visible rather than
+being defined out of existence; the gate is applied as a reported layer on top.
+
+**It is conservative, not exact.** Some correct boxes have spreads up to 18 m —
+the near cluster happened to be the object anyway. The gate identifies boxes whose
+evidence is *ambiguous*, not boxes that are *wrong*.
 
 ---
 

@@ -48,6 +48,35 @@ degrades with range.
 workaround — widening the sampling window — made things 12× worse
 ([D-011](decisions.md)).
 
+### FM-4 · Two surfaces in one box: bimodal error beyond 50 m · **CONFIRMED**
+
+**Condition:** a 2D box contains returns from the object *and* from something in
+front of or behind it, without the annotator flagging occlusion.
+
+**Behaviour:** the percentile reduction returns one surface with full confidence
+and no signal about which. Error becomes **bimodal**: on val beyond 50 m, median
+|error| 0.12 m but MAE 4.75 m — 83% of boxes under 1 m, 14% over 5 m, p99 66 m.
+
+**Detection:** the interquartile depth spread separates the populations 47×
+(0.248 m on correct boxes, 11.65 m on failures). Point count does **not** —
+failures had *fewer* points than successes, so the intuitive gate is backwards.
+
+**Handling:** abstain above 1.5 m spread ([D-013](decisions.md)). Residual failure
+rate 0.27%, and 27% of 50+ m boxes are given up to achieve it.
+
+### FM-5 · Ego pitch excursion and standing offset · **CONFIRMED**
+
+**Condition:** ordinary city driving. No hard braking required.
+
+**Behaviour:** measured peak-to-peak pitch of **2.011°** (`0084`) and **2.221°**
+(`0091`), at or above the level stated to cost >10% range error. `0084` also
+carries a **sustained +1.026° mean** — a systematic range bias across an entire
+drive that no temporal filter removes.
+
+**Handling:** undecided, and blocking Phase 3 ([D-009](decisions.md)). Either
+estimate camera pitch from the horizon row or publish a measured sensitivity
+curve. Note the dev drive showed only 1.05° and would have understated this.
+
 ---
 
 ## Detection (Phase 2) — not yet characterised
