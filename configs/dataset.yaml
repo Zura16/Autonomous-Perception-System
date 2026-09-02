@@ -1,0 +1,79 @@
+# KITTI raw dataset manifest.
+#
+# Splits are BY SEQUENCE, never by frame: consecutive frames of one drive are
+# near-duplicates, so a frame-level split leaks the answer across the boundary
+# and inflates every number in benchmarks.md.
+#
+# CHANGING ANYTHING IN THIS FILE INVALIDATES EVERY ROW IN docs/benchmarks.md.
+# See docs/decisions.md D-002.
+
+root: data/kitti
+calib_date: "2011_09_26"
+
+# Sensor streams kept after extraction. The raw sync zips also ship image_00 and
+# image_01 (grayscale stereo pair) and image_03 (right colour); this project is
+# explicitly monocular on the left colour camera, so they are deleted on unpack
+# to halve disk. Re-fetch is a documented, repeatable command, not a loss.
+keep_streams:
+  - image_02          # left colour camera -- THE camera for this project
+  - velodyne_points   # ground-truth range source
+  - oxts              # ego IMU/GPS; ego speed for closing-speed sanity checks
+
+# Drive selection was made by auditing LABEL DENSITY before downloading pixels:
+# tracklet zips are ~1.5 MB against ~1.5 GB for a drive, so every candidate's
+# label count and range distribution was measured first (tools/audit_labels.py).
+# The first val split drawn without that audit was 91% one drive and 809 boxes
+# total -- too thin to bin range error five ways. See docs/decisions.md D-005.
+
+drives:
+  # dev -- fast iteration loop. Numbers from this split are NEVER reported.
+  - id: "2011_09_26_drive_0013"
+    split: dev
+    scene: city
+    frames: 144
+    note: "Smallest city drive, 385 boxes. Dev loop only."
+
+  # val -- every number quoted anywhere comes from here until Phase 9.
+  # ~8.0k labelled boxes, every range bin >= 950.
+  - id: "2011_09_26_drive_0059"
+    split: val
+    scene: city
+    frames: 373
+    note: "3810 boxes. Densest and most evenly range-distributed drive available."
+  - id: "2011_09_26_drive_0084"
+    split: val
+    scene: city
+    frames: 383
+    note: "2818 boxes, strong 30-50 m population."
+  - id: "2011_09_26_drive_0091"
+    split: val
+    scene: city
+    frames: 340
+    note: "1295 boxes, VRU-heavy (42 pedestrians, 8 cyclists). The only real VRU coverage."
+  - id: "2011_09_26_drive_0056"
+    split: val
+    scene: city
+    frames: 294
+    note: "740 boxes. Only drive carrying Tram and Truck labels; heavy occlusion."
+  - id: "2011_09_26_drive_0027"
+    split: val
+    scene: road
+    frames: 188
+    note: >
+      Road/highway. Only 69 boxes -- deliberately kept despite being too sparse to
+      carry a binned number alone, because it is the only sustained-closing-speed
+      regime in val and FCW exists for exactly that regime. Reported as a
+      scene-stratified row, never pooled silently into the city numbers.
+
+  # test -- untouched until Phase 9. Opening it early destroys its purpose.
+  # Label density here was NOT audited: that would be peeking.
+  - id: "2011_09_26_drive_0009"
+    split: test
+    scene: city
+    frames: 447
+    note: "Largest city drive. HELD OUT."
+  - id: "2011_09_26_drive_0015"
+    split: test
+    scene: road
+    frames: 297
+    note: "Road. HELD OUT."
