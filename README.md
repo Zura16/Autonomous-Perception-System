@@ -23,15 +23,15 @@ to be able to say exactly why, with numbers.
 
 ## Status
 
-**Phase 1 of 9 complete.** The ruler exists; the estimator it will measure does
-not yet. That ordering is deliberate — an estimator with no ground truth is a
-decoration.
+**Phases 0–2 of 9 complete.** The ruler and the detector exist; the monocular
+estimator they will measure does not yet. That ordering is deliberate — an
+estimator with no ground truth is a decoration.
 
 | Phase | | |
 |---|---|---|
 | 0 | Repo, dataset, calibration, one frame rendered | ✅ |
 | 1 | **LiDAR ground-truth harness** | ✅ |
-| 2 | Detection baseline (mAP + latency) | — |
+| 2 | **Detection baseline** (AP + recall-vs-range + latency) | ✅ |
 | 3 | **Monocular range + error-vs-range curve** ← headline | — |
 | 4 | Tracking: IoU → SORT, MOTA/IDF1/ID-switches | — |
 | 5 | Closing speed + TTC (scale-rate + KF) | — |
@@ -99,6 +99,42 @@ before quoting those anywhere overturned all three — the far-range figure had
 rested on ten boxes. The dev numbers are kept in `benchmarks.md` marked
 superseded, because the gap between them is the point.
 
+## What Phase 2 established
+
+YOLOv8n, zero-shot COCO weights, no fine-tuning — the honest denominator.
+
+| | val |
+|---|---|
+| AP@0.5, class-agnostic | **0.615** (vehicle 0.662, VRU 0.450) |
+| Latency p50 / p95 / p99 | 17.1 / 24.8 / **34.0 ms** vs a **103.56 ms** budget |
+
+**Recall vs range is the number that matters**, not AP:
+
+| bin | 0–10 m | 10–20 m | 20–30 m | 30–50 m | 50+ m |
+|---|---|---|---|---|---|
+| all | 86% | 76% | 65% | 46% | 24% |
+| vehicle | 91% | 79% | 72% | 50% | 25% |
+| **VRU** | 75% | 69% | 36% | **2%** | **0%** |
+
+Pedestrians and cyclists are effectively invisible past 30 m — and they are the
+class where a missed detection is a person. The mechanism is apparent size, not
+distance: recall tracks pixel height (31% below 25 px, 81% above 80 px), which is
+the same `h = f·H/D` relation that governs monocular range error. The detector
+and the estimator degrade for one shared reason.
+
+**And the structural finding that reshapes everything after it.** Evaluating a
+monocular range estimator needs labels that are *both* detected and
+groundtruthable. Joined per label:
+
+| bin | 0–10 m | 10–20 m | 20–30 m | 30–50 m | 50+ m |
+|---|---|---|---|---|---|
+| usable objects | 430 | 1142 | 793 | 475 | **30** |
+
+**The credible evaluation envelope is 0–50 m** — and beyond it the limit is
+*evidence availability*, not estimator accuracy. Those are different claims and
+only one of them is supported. Thirty objects is the same order as the ten-box
+sample that produced a false figure the day before.
+
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
 
@@ -124,11 +160,14 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 |---|---|
 | `aps/kitti/` | Calibration, drive loading, tracklet labels |
 | `aps/groundtruth.py` | The ruler: LiDAR-in-box range, validity tiers, spread gate |
+| `aps/detect.py` | YOLOv8 wrapper + the COCO→APS class mapping |
+| `aps/matching.py` | IoU, greedy association, ignore regions, average precision |
 | `aps/viz.py` | Debug rendering (not the HUD — that is Phase 8) |
 | `tools/` | Dataset fetch, label audit, GT build, frame render |
+| `eval/` | Evaluation harnesses (detection; range/tracking/TTC to come) |
 | `configs/dataset.yaml` | The split. Changing it invalidates every benchmark row |
 | `docs/` | Benchmarks, decisions, error budget, glossary, history |
-| `tests/` | Closed-form geometry cases; 41 tests |
+| `tests/` | Closed-form geometry and AP cases; 68 tests |
 | `legacy/` | The v1 demo, archived. **Not a baseline** — see below |
 
 ## About `legacy/`

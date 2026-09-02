@@ -79,7 +79,42 @@ curve. Note the dev drive showed only 1.05° and would have understated this.
 
 ---
 
-## Detection (Phase 2) — not yet characterised
+## Detection (Phase 2)
+
+### FM-6 · VRU recall collapses beyond 30 m · **CONFIRMED**
+
+**Condition:** pedestrians and cyclists past ~30 m, YOLOv8n at 640 px.
+
+**Behaviour:** recall by range 75% / 69% / 36% / **2%** / **0%** across
+0–10 / 10–20 / 20–30 / 30–50 / 50+ m. Vehicles at the same ranges hold
+91 / 79 / 72 / 50 / 25%.
+
+**Why it matters more than the vehicle numbers:** VRUs are the safety-critical
+class — a missed detection is a person. Any FCW claim about VRUs is bounded at
+about 30 m by detection alone, before geometry enters.
+
+**Mechanism:** apparent size, not range. Recall tracks pixel height (31% below
+25 px, 81% above 80 px), and a pedestrian subtends far fewer pixels than a car at
+the same distance.
+
+### FM-7 · Latency stalls exceeding the budget by 5x · **CONFIRMED**
+
+**Condition:** five frames of 1450 on val (0.34%).
+
+**Behaviour:** 180 / 216 / 235 / 259 / **553 ms** against a 103.56 ms budget,
+where p50 is 17 ms and the mean excluding them is 16.73 ms. Scattered through the
+run (indices 32, 871, 1132, 1195, 1399), so not a per-drive warmup artefact —
+these look like host-level stalls.
+
+**Why it is recorded:** the p99 (34 ms, 33% of budget) hides them completely. On a
+real system each stall is a dropped frame, and a dropped frame during a closing
+manoeuvre is the case the system exists for.
+
+### FM-8 · Occlusion halves detection recall · **CONFIRMED**
+
+81% visible → 53% partly occluded → 21% fully occluded. Compounds with FM-1:
+occluded objects are both harder to detect *and* impossible to ground-truth,
+which is why the compound coverage in Row 2.6 is what bounds Phase 3.
 ## Monocular range (Phase 3) — not yet characterised
 
 Expected, from the error budget and to be confirmed or refuted with frames:

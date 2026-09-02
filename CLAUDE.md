@@ -99,7 +99,10 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | **GT ruler** (`shrink_p20` + spread gate, **val**) | MAE **0.25 m**, med 0.17, p95 0.63 · by bin **0.21 / 0.24 / 0.25 / 0.27 / 0.78 m** · failure rate 0.27% |
 | GT coverage (val) | **38.1%** of labelled boxes end with a ground-truth range (45% usable tier → 89% measured → 95% pass spread gate) |
 | Spread gate | abstain when interquartile depth spread > **1.5 m** ([D-013](docs/decisions.md)) |
-| Detection mAP (model + input size) | TBD |
+| Detection AP@0.5 (YOLOv8n 640px, val, class-agnostic) | **0.615** · vehicle 0.662 · VRU 0.450 |
+| Detection recall vs range (conf 0.25) | **86 / 76 / 65 / 46 / 24 %** · VRU **75 / 69 / 36 / 2 / 0 %** |
+| Detection latency (M2 MPS, 640px, batch 1) | p50 **17.12** · p95 24.75 · p99 **34.01 ms** = 33% of budget · **5/1450 frames over budget**, max 553 ms |
+| **Evaluation envelope** | **0–50 m** — bounded by evidence, not accuracy. Usable N/bin: 430/1142/793/475/**30** ([D-015](docs/decisions.md)) |
 | **Range error by bin** (0–10 / 10–20 / 20–30 / 30–50 / 50+ m) | TBD / TBD / TBD / TBD / TBD |
 | **Credible operating envelope** (range where error < X%) | TBD ← *the project's headline number* |
 | Closing-speed error vs GT | TBD |
@@ -107,8 +110,8 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Tracking MOTA / IDF1 / ID-switches — IoU vs SORT | TBD |
 | Lane departure detection rate / FP rate (labeled set) | TBD |
 | FCW: TPR and **FP per hour**, at threshold TTC = TBD | TBD |
-| Per-stage latency p50/p95/p99 | TBD |
-| Test suite count | **41** |
+| Per-stage latency p50/p95/p99 | detection only so far — see above. Track/range/KF/decide not yet measured |
+| Test suite count | **68** |
 
 ## Common commands (run from repo root)
 
@@ -125,6 +128,7 @@ python tools/render_frame.py --drive 2011_09_26_drive_0013 --frame 20 \
     --out docs/figures/phase0_projection_check.png # standing calibration check
 
 # ── Evaluate (always before performance or visual work)
+python eval/eval_detection.py --split val                      # AP, recall-vs-range, latency
 python eval/eval_range.py    --split val --bins 10,20,30,50   # → error-vs-range curve
 python eval/eval_tracking.py --split val --tracker iou|sort
 python eval/eval_ttc.py      --split val
@@ -147,7 +151,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 - [x] **Phase 0 — Repo + dataset + one frame.** KITTI loader, calibration parsed, one frame rendered with boxes. Environment fingerprinted.
 - [x] **Phase 1 — Ground truth harness.** Project LiDAR into the image; per-detection GT range, with the ruler's own error and coverage characterised by range bin.
-- [ ] **Phase 2 — Detection baseline.** YOLOv8, mAP on val, and per-stage latency p50/p95/p99 **against the 103.56 ms sensor budget**. No optimization — that is gated on measuring a miss ([D-012](docs/decisions.md)).
+- [x] **Phase 2 — Detection baseline.** YOLOv8n zero-shot: AP 0.615 class-agnostic, recall-vs-range measured, latency at 33% of budget at p99. No optimization — nothing missed the budget except five host stalls ([D-012](docs/decisions.md)).
 - [ ] **Phase 3 — Monocular range + error-vs-range curve.** Pitch handling decided and justified. **This curve is the headline artifact of the whole project.**
 - [ ] **Phase 4 — Tracking.** IoU baseline → SORT. MOTA/IDF1/ID-switches for both, honestly compared.
 - [ ] **Phase 5 — Closing speed + TTC.** Scale-rate estimator, KF over image-plane state, deadband. Validate on synthetic constant-velocity sequences first, then real data.
@@ -160,13 +164,14 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 1 COMPLETE and re-verified on val** (2026-09-02). Phase 0 ✅. **Next: Phase 2 — detection baseline.** The v1 demo in `legacy/` is *not* a baseline ([D-008](docs/decisions.md)).
-- **The ruler (val, N=8705).** `shrink_p20` + spread gate: MAE **0.25 m**, median 0.17, p95 0.63, residual failure rate **0.27%**; by bin **0.21 / 0.24 / 0.25 / 0.27 / 0.78 m**. Ground truth reaches **38.1%** of labelled objects — so every range number this project reports is measured on the unoccluded, untruncated, unambiguous subset and is a **lower bound**.
-- **Val overturned three dev figures.** Coverage 64% → **45%** usable · ruler MAE 0.13 → **0.25 m** · and the 50+ m bin was revealed as **bimodal** (median 0.12 m but MAE 4.75 m, 14% of boxes over 5 m error) where dev's ten-box sample had shown a clean 0.22 m. The spread gate ([D-013](docs/decisions.md)) fixes it: 50+ goes to MAE 0.78 / p95 0.53.
-- **Pitch is now a measured problem, not a projected one.** Val drives reach **2.01°** and **2.22°** peak-to-peak — above the 2° / >10%-range-error threshold — with no hard braking, and `0084` carries a **sustained +1.03° mean** (a systematic bias, not noise). This is larger than the entire 0.25 m GT budget. **Phase 3 must decide pitch handling before the error-vs-range curve, not after.**
-- **Verified:** 41 tests, ruff + black clean. Detector smoke-tested: YOLOv8n **12.4 ms MPS / 28.0 ms CPU** per frame — already inside the 103.56 ms budget before any optimisation.
-- **Known issues:** `0027` has 69 boxes and cannot carry a binned number alone · no CUDA, so no TensorRT ladder ([D-012](docs/decisions.md)) · test split deliberately unaudited · GT beyond 50 m rests on 61 gated boxes.
-- **Open decisions:** pitch estimation vs characterisation (**now urgent**) · contact-point vs class-size prior · COCO→KITTI class mapping for Phase 2 · TTC threshold and deadband. See the table at the foot of [decisions.md](docs/decisions.md).
+- **Phase:** **Phase 2 COMPLETE** (2026-09-02). Phases 0–1 ✅. **Next: Phase 3 — monocular range + the error-vs-range curve**, the project's headline artifact.
+- **BLOCKING Phase 3: the pitch decision.** Val drives reach **2.01°/2.22° peak-to-peak** and `0084` carries a **sustained +1.026° mean** — above the 2° / >10%-range-error threshold, with no hard braking, and ~2 orders of magnitude larger than the 0.25 m GT budget. Estimate pitch from the horizon row, or publish a measured sensitivity curve. Not deferrable ([D-009](docs/decisions.md)).
+- **The ruler (val, N=8705).** `shrink_p20` + spread gate: MAE **0.25 m**, median 0.17, p95 0.63, failure rate **0.27%**; by bin **0.21 / 0.24 / 0.25 / 0.27 / 0.78 m**.
+- **Detection (val, YOLOv8n zero-shot).** Class-agnostic AP@0.5 **0.615** (vehicle 0.662, VRU 0.450). Recall vs range **86/76/65/46/24%**; **VRU collapses to 2% at 30–50 m and 0% beyond** — the safety-critical class is bounded at ~30 m by detection alone. Mechanism is apparent size, not range: recall tracks pixel height (31% under 25 px, 81% over 80 px).
+- **Latency: 33% of budget at p99** (17.12 / 24.75 / 34.01 ms vs 103.56). But **5 frames of 1450 exceeded the budget**, max 553 ms — host stalls the p99 hides. No optimization warranted ([D-012](docs/decisions.md)).
+- **THE structural finding ([D-015](docs/decisions.md)).** Phase 3 needs labels that are *both* detected and groundtruthable. Per-label join: **430 / 1142 / 793 / 475 / 30** usable objects per range bin. **The 50+ bin has 30 objects** — the same order as the ten-box dev sample that produced a false figure on 09-01. **The credible envelope is 0–50 m, bounded by evidence availability, not by estimator accuracy** — a distinction to state every time it is quoted.
+- **Verified:** 68 tests, ruff + black clean. Detections cached to `artifacts/detections_val.npz` (detector boxes + matched GT range) — Phase 3 consumes this directly.
+- **Known issues:** KITTI raw does not label every object, so precision (and AP) is pessimistic by an unmeasured amount · `0027` has 69 boxes · no CUDA ([D-012](docs/decisions.md)) · test split deliberately unaudited.
 - **Standing warning:** draft resume bullets exist describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo**. That is not this system. Claims get generated from `benchmarks.md` in Phase 9.
 
 ## Project skills (slash commands)

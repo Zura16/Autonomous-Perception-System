@@ -232,6 +232,119 @@ anywhere was the single most valuable step of the session.**
 
 ---
 
+## Phase 2 — Detection baseline
+
+**Model:** YOLOv8n (COCO-pretrained, no fine-tuning), 640 px, batch 1.
+**Split:** val, 1450 frames, 8705 labels. **IoU 0.5.** Commit: *(this commit)*
+
+Reported class-agnostic and at a coarse vehicle/VRU split, and no finer: KITTI's
+classes are not recoverable from a COCO-trained model without inventing
+information ([D-014](decisions.md)).
+
+### Row 2.1 — Average precision @ IoU 0.5
+
+| | AP | labels |
+|---|---|---|
+| **class-agnostic** ← headline | **0.615** | 8705 |
+| vehicle | 0.662 | 7068 |
+| VRU | 0.450 | 1637 |
+
+23447 detections scored; **556 discarded** as landing on Tram/Misc/Person-sitting
+ignore regions. Without ignore handling those would have counted against
+precision for correctly finding real objects KITTI raw does not grade.
+
+**This is a zero-shot COCO model on KITTI**, not a KITTI-trained detector. It is
+the honest denominator for later work, not a competitive number.
+
+### Row 2.2 — Recall vs range, conf ≥ 0.25 ← **the row that bounds the project**
+
+| bin (m) | labels | recall | vehicle | VRU |
+|---|---|---|---|---|
+| 0–10 | 1184 | 86% | 91% | 75% |
+| 10–20 | 2162 | 76% | 79% | 69% |
+| 20–30 | 1877 | 65% | 72% | 36% |
+| 30–50 | 2381 | 46% | 50% | **2%** |
+| 50+ | 1101 | 24% | 25% | **0%** |
+| **all** | **8705** | **60%** | | |
+
+**VRU recall collapses to 2% at 30–50 m and 0% beyond.** Pedestrians and cyclists
+are effectively invisible to this model past 30 m — and they are the
+safety-critical class, the one where a missed detection is a person. Any FCW
+claim about VRUs is bounded at ~30 m by detection alone.
+
+### Row 2.3 — Recall vs box height: the mechanism
+
+| box height (px) | labels | recall | median range |
+|---|---|---|---|
+| < 25 | 1400 | 31% | 54.9 m |
+| 25–40 | 2207 | 48% | 36.1 m |
+| 40–80 | 2906 | 68% | 21.4 m |
+| 80+ | 2192 | 81% | 9.6 m |
+
+Range is not the cause; **apparent size is**. Recall tracks pixel height, and
+range only matters because it shrinks the object. This is the same `h = f·H/D`
+relation that governs the monocular range error — the detector and the estimator
+degrade for one shared reason.
+
+### Row 2.4 — Recall vs occlusion
+
+| occlusion | labels | recall |
+|---|---|---|
+| visible | 4432 | 81% |
+| partly | 2423 | 53% |
+| fully | 1806 | 21% |
+| unset | 44 | 18% |
+
+### Row 2.5 — Latency vs the 103.56 ms budget
+
+Apple M2, MPS, 640 px, batch 1, N=1450, warmup excluded, `torch.mps.synchronize()`
+before the clock stops.
+
+| | ms | % of budget |
+|---|---|---|
+| p50 | 17.12 | 16.5% |
+| p95 | 24.75 | 23.9% |
+| p99 | 34.01 | 32.8% |
+| p99.9 | 247.92 | 239.4% |
+| **max** | **552.72** | **533.7%** |
+
+**Five frames of 1450 (0.34%) exceeded the budget**, at 180 / 216 / 235 / 259 /
+553 ms. Mean excluding those five is 16.73 ms. They are scattered through the run
+(frame indices 32, 871, 1132, 1195, 1399), so they are not a per-drive warmup
+artefact — they look like host-level stalls, and on a real system each is a
+dropped frame.
+
+Reporting the p99 alone (33% of budget) would hide them, which is exactly why
+hard rule 10 requires the tail. **Detection currently uses a third of the budget
+at p99; track / range / KF / decide are not yet in this sum.**
+
+### Row 2.6 — Compound evidence coverage ← **what Phase 3 can actually measure**
+
+A label is usable for evaluating monocular range only if it is **both detected
+and groundtruthable**. Computed as a true per-label join, not a product of
+marginals — the two are positively correlated (occluded objects fail both), so
+the product understates by ~10 points.
+
+| bin (m) | labels | detected | GT-able | **both** | **N usable** |
+|---|---|---|---|---|---|
+| 0–10 | 1184 | 86% | 38% | 36% | **430** |
+| 10–20 | 2162 | 76% | 58% | 53% | **1142** |
+| 20–30 | 1877 | 65% | 51% | 42% | **793** |
+| 30–50 | 2381 | 46% | 25% | 20% | **475** |
+| 50+ | 1101 | 24% | 6% | 3% | **30** |
+| **all** | **8705** | **60%** | **38%** | **33%** | **2870** |
+
+**The 50+ m bin has 30 objects.** That is the same order as the ten-box dev
+sample that produced a false 0.22 m figure on 2026-09-01. It cannot carry a
+Phase 3 number and will not be asked to ([D-015](decisions.md)).
+
+**The project's credible evaluation envelope is 0–50 m**, well-populated to 30 m
+(2365 objects) and thin from 30–50 m (475). Beyond 50 m the limit is *evidence
+availability*, not estimator accuracy — a distinction that has to be stated
+every time the envelope is quoted, because they are not the same claim.
+
+---
+
 ## Pending — nothing measured yet
 
 These rows are deliberately empty. A value here that is not a measurement is the
@@ -239,8 +352,6 @@ failure mode this file exists to prevent.
 
 | Row | Blocks on |
 |---|---|
-| 2.x — Detection mAP (val) | Phase 2 |
-| 2.y — Per-stage latency p50/p95/p99 vs the 103.56 ms budget (M2/MPS) | Phase 2 |
 | 3.x — **Monocular range error vs range** ← headline | Phase 3 |
 | 3.y — Credible operating envelope (range where error < X%) | Phase 3 |
 | 4.x — Tracking MOTA / IDF1 / ID-switches, IoU vs SORT | Phase 4 |

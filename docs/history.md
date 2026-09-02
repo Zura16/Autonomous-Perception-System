@@ -164,7 +164,57 @@ Phase 3 can no longer defer the pitch decision ([D-009](decisions.md)).
 - 41 tests, ruff + black clean. Every doc carrying a Phase 1 number updated;
   dev figures retained in `benchmarks.md` marked superseded.
 
-**Next:** Phase 2 proper — detection baseline. Open question to settle first:
-the COCO→KITTI class mapping (KITTI `Van` vs COCO `car`/`truck`, and a `Cyclist`
-producing both a `person` and a `bicycle` box), plus ignore-regions for labelled
-objects outside the FCW classes so they do not score as false positives.
+### Phase 2 — detection baseline, same day
+
+The class-mapping question was settled first: **class-agnostic AP as the
+headline, vehicle/VRU as the only finer split, no per-class mAP**
+([D-014](decisions.md)). KITTI `Van` is COCO `car` or `truck` depending on the
+vehicle; a `Cyclist` produces both a `person` and a `bicycle` box. A per-class
+number built on that would measure the mapping, not the detector. Class-agnostic
+NMS follows from the same reasoning, and ignore regions (Tram/Misc/Person-sitting,
+matched on intersection-over-detection-area rather than IoU) discarded **556**
+detections that would otherwise have been false positives for finding real
+objects KITTI raw does not grade.
+
+**Results, YOLOv8n zero-shot on val:** class-agnostic AP@0.5 **0.615** (vehicle
+0.662, VRU 0.450); latency p50 17.1 / p95 24.8 / **p99 34.0 ms** against the
+103.56 ms budget.
+
+**Recall vs range turned out to matter far more than AP.** 86 / 76 / 65 / 46 /
+24% across the bins — and **VRU recall collapses to 2% at 30–50 m and 0%
+beyond**. The safety-critical class is bounded at ~30 m by detection alone. Row
+2.3 gives the mechanism: recall tracks *pixel height*, not range (31% below
+25 px, 81% above 80 px). The detector and the monocular estimator degrade for the
+same `h = f·H/D` reason.
+
+**The latency tail was worth reporting.** p99 is a comfortable 33% of budget, but
+**five frames of 1450 exceeded it** at 180–553 ms, scattered through the run so
+not a warmup artefact. The p99 hides them entirely; each is a dropped frame on a
+real system.
+
+### The structural finding
+
+Phase 3 needs labels that are **both detected and groundtruthable**. Computed as
+a true per-label join — not a product of marginals, which understated it by ten
+points because the two are positively correlated:
+
+| bin | 0–10 | 10–20 | 20–30 | 30–50 | 50+ |
+|---|---|---|---|---|---|
+| usable N | 430 | 1142 | 793 | 475 | **30** |
+
+**Thirty objects beyond 50 m.** The same order as the ten-box dev sample that had
+produced a false 0.22 m figure that morning. The credible evaluation envelope is
+therefore **0–50 m**, and the limit is *evidence availability* rather than
+estimator accuracy — two different claims, only one of them supported
+([D-015](decisions.md)).
+
+**Landed:** 68 tests (27 new, covering IoU/IoA, greedy association, ignore
+regions, and AP bookkeeping — including that a duplicate detection is a false
+positive and that AP with zero labels is NaN rather than 0). ruff + black clean.
+`artifacts/detections_val.npz` caches detector boxes paired with matched GT
+range, which Phase 3 consumes directly.
+
+**Next:** Phase 3 — monocular range and the error-vs-range curve, the project's
+headline artifact. **The pitch decision blocks it** and cannot be deferred: val
+pitch reaches 2.01°/2.22° peak-to-peak with a sustained +1.03° offset on `0084`,
+which is ~2 orders of magnitude larger than the 0.25 m ground-truth budget.

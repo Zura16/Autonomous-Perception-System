@@ -421,6 +421,89 @@ evidence is *ambiguous*, not boxes that are *wrong*.
 
 ---
 
+## D-014 · Detection is scored class-agnostically and at a coarse group split · 2026-09-02 · Active
+
+**Decision.** Detection reports **class-agnostic AP** as the headline plus a
+**vehicle / VRU** split. Fine-grained KITTI classes (Car vs Van vs Truck) are
+**not** reported, and no COCO→KITTI per-class mapping is published.
+
+**Why the fine mapping is not recoverable.**
+
+- KITTI `Van` is COCO `car` for some vans and `truck` for others. The boundary is
+  a judgement COCO's annotators made per image; there is no rule to apply.
+- KITTI `Cyclist` is ONE object; COCO emits `person` **and** `bicycle` for it.
+- KITTI `Person (sitting)` has no COCO analogue.
+
+A per-class mAP built on top of that would measure the mapping, not the detector.
+
+**What is reported instead, and why it is the right question.** FCW asks *"is
+there an obstacle at range D closing at speed V"*, not what taxonomy it belongs
+to — so class-agnostic is the operationally meaningful metric, not a concession.
+The vehicle/VRU split is kept because it is defensible **and** because it matters
+downstream: Phase 3's size prior differs enormously between a truck and a
+pedestrian, and Row 2.2 shows the two groups behave completely differently with
+range (VRU recall collapses to 2% at 30–50 m while vehicles hold 50%).
+
+**Class-agnostic NMS follows from this.** Suppressing across classes collapses
+the cyclist's `person` + `bicycle` pair into the single object physically
+present. Per-class NMS would keep both, scoring one as a hit and the other as a
+false alarm for an object the detector plainly found.
+
+**Ignore regions.** KITTI raw has **no `DontCare` regions**, so labelled objects
+outside the FCW classes — Tram, Misc, Person (sitting) — are treated as ignore
+regions using intersection-over-detection-area, not IoU (a small detection inside
+a large region has low IoU but should still be ignored). On val this discarded
+**556 detections** that would otherwise have been counted as false positives for
+correctly finding real objects.
+
+**Residual limitation, stated.** KITTI raw does not label every object in every
+frame. Unlabelled-but-real objects still score as false positives, so the
+precision figure — and therefore AP — is pessimistic by an unmeasured amount.
+Quantifying it would require re-annotating the split.
+
+---
+
+## D-015 · The evaluation envelope is bounded by evidence, not by accuracy · 2026-09-02 · Active
+
+**Decision.** The project's credible evaluation envelope is **0–50 m**. The 50+ m
+bin is reported with its sample size and is **not** used to support any claim
+about monocular range, TTC, or FCW.
+
+**Why.** A label can be used to evaluate a monocular range estimator only if it is
+**both detected and groundtruthable**. Joined per label on val:
+
+| bin (m) | labels | detected | GT-able | both | **N usable** |
+|---|---|---|---|---|---|
+| 0–10 | 1184 | 86% | 38% | 36% | 430 |
+| 10–20 | 2162 | 76% | 58% | 53% | 1142 |
+| 20–30 | 1877 | 65% | 51% | 42% | 793 |
+| 30–50 | 2381 | 46% | 25% | 20% | 475 |
+| 50+ | 1101 | 24% | 6% | 3% | **30** |
+
+**Thirty objects at 50+ m.** On 2026-09-01 a ten-box sample produced a confident
+0.22 m figure for exactly that bin, which val overturned by a factor of twenty
+([D-013](decisions.md)). Thirty is the same order of magnitude and will not be
+trusted either.
+
+**The distinction that must be stated every time.** "We cannot characterise
+monocular range beyond 50 m" is a statement about **evidence availability**, not
+about the estimator's accuracy. The estimator might be fine out there; there is
+no way to know from this data. Conflating the two would be claiming a limitation
+we have not measured, which is the mirror image of claiming a capability we have
+not measured — and equally wrong.
+
+**Two independent causes, both measured.** Detection recall falls to 24% at 50+
+(Row 2.2), and ground-truth coverage falls to 6% (Row 1.2 + the spread gate).
+Neither is fixable by better geometry, and improving one alone barely moves the
+intersection.
+
+**What would extend the envelope.** A KITTI-trained or higher-resolution detector
+(recall), a denser LiDAR or multi-sweep aggregation (coverage), or more val
+drives with far-range labels (sample size). All three are out of scope for now;
+the envelope is stated instead of quietly worked around.
+
+---
+
 ## Open questions
 
 | Question | Blocks | Notes |
