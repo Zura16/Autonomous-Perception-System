@@ -23,16 +23,17 @@ to be able to say exactly why, with numbers.
 
 ## Status
 
-**Phases 0–2 of 9 complete.** The ruler and the detector exist; the monocular
-estimator they will measure does not yet. That ordering is deliberate — an
-estimator with no ground truth is a decoration.
+**Phases 0–3 of 9 complete**, including the headline artifact: the monocular
+error-vs-range curve, graded by a LiDAR ruler whose own error was characterised
+first. That ordering is deliberate — an estimator with no ground truth is a
+decoration.
 
 | Phase | | |
 |---|---|---|
 | 0 | Repo, dataset, calibration, one frame rendered | ✅ |
 | 1 | **LiDAR ground-truth harness** | ✅ |
 | 2 | **Detection baseline** (AP + recall-vs-range + latency) | ✅ |
-| 3 | **Monocular range + error-vs-range curve** ← headline | — |
+| 3 | **Monocular range + error-vs-range curve** ← headline | ✅ |
 | 4 | Tracking: IoU → SORT, MOTA/IDF1/ID-switches | — |
 | 5 | Closing speed + TTC (scale-rate + KF) | — |
 | 6 | Lane detection + departure metric | — |
@@ -135,6 +136,44 @@ groundtruthable. Joined per label:
 only one of them is supported. Thirty objects is the same order as the ten-box
 sample that produced a false figure the day before.
 
+## What Phase 3 established — the headline
+
+Monocular range from detector boxes, graded by the Phase 1 ruler on those same
+boxes. **val, N = 6122 detections.** MAPE by range bin:
+
+| bin | 0–10 m | 10–20 m | 20–30 m | 30–50 m | 50+ m |
+|---|---|---|---|---|---|
+| contact-point | **22.7%** | **10.3%** | 12.2% | 18.7% | 24.0% |
+| size-prior | 29.5% | 14.9% | **11.0%** | **15.3%** | **16.5%** |
+
+**Credible operating envelope: 10–30 m at ≤15% MAPE.** No range bin achieves
+10%; the best figure anywhere is 10.3% at 10–20 m.
+
+**The curve is U-shaped, and that is the result.** Error is *worst in the near
+field*, not at range — a collision-warning system least accurate where a
+collision is most imminent. The cause is not geometry:
+
+**Detector boxes are systematically shorter than the objects they contain.**
+Implied object height (`box_height × range / f`, which must be range-independent)
+is **1.400 m at 0–10 m against a true 1.595 m — a 12% shortfall**, and 5–8%
+elsewhere. Both estimators inherit it one-for-one as a range over-estimate. It is
+a **bias, not jitter**, so temporal filtering and the Phase 5 Kalman filter will
+not remove it.
+
+**Pitch turned out smaller than feared, and currently invisible.** Fitting the
+road plane to LiDAR gives the *right* quantity — camera-to-road pitch, mean
++0.150°, |p95| 0.715° — where earlier OXTS figures of 2.0–2.2° measured
+navigation-frame vehicle attitude including road grade, overstating it 2–3×.
+Stratifying error by measured pitch gives a **flat** curve where the geometry
+predicts an 8× span: pitch is real but masked by the box bias. Correcting it
+would have bought almost nothing, which is why the decision was to *characterise*
+the flat-ground assumption rather than correct it.
+
+**Two errors caught by unit tests this session**, both of which flattered the
+method: a linearised pitch formula used as if exact (understating the cost by a
+third at 50 m), and a config gate for image-clipped boxes that was declared and
+never implemented (those 4.2% of detections carry 46.4% MAPE against 13.6%).
+
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
 
@@ -161,13 +200,15 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `aps/kitti/` | Calibration, drive loading, tracklet labels |
 | `aps/groundtruth.py` | The ruler: LiDAR-in-box range, validity tiers, spread gate |
 | `aps/detect.py` | YOLOv8 wrapper + the COCO→APS class mapping |
+| `aps/geometry.py` | Monocular range: contact-point and size-prior estimators |
+| `aps/groundplane.py` | LiDAR road-plane fit — camera height and pitch, GT only |
 | `aps/matching.py` | IoU, greedy association, ignore regions, average precision |
 | `aps/viz.py` | Debug rendering (not the HUD — that is Phase 8) |
 | `tools/` | Dataset fetch, label audit, GT build, frame render |
 | `eval/` | Evaluation harnesses (detection; range/tracking/TTC to come) |
 | `configs/dataset.yaml` | The split. Changing it invalidates every benchmark row |
 | `docs/` | Benchmarks, decisions, error budget, glossary, history |
-| `tests/` | Closed-form geometry and AP cases; 68 tests |
+| `tests/` | Closed-form geometry and AP cases; 95 tests |
 | `legacy/` | The v1 demo, archived. **Not a baseline** — see below |
 
 ## About `legacy/`

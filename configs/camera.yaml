@@ -1,0 +1,64 @@
+# Camera mounting and object priors for the monocular range estimators.
+#
+# Every value here is measured or sourced, never assumed, and every prior
+# carries its spread (CLAUDE.md hard rule 6: a prior without a variance is a
+# guess wearing a lab coat).
+
+# ── Camera height above the road ─────────────────────────────────────────────
+# MEASURED by fitting the road plane to LiDAR returns (aps/groundplane.py) over
+# 134 val frames. LiDAR is ground truth here, never an input to the estimator --
+# the estimator uses this single fixed nominal, exactly as a deployed system
+# with no LiDAR would.
+camera:
+  height_m: 1.655        # val mean; std 0.027 m, range 1.583..1.745
+  height_std_m: 0.027    # 1.6% -> a 1.6% range error floor for contact-point
+  pitch_deg: 0.0         # FLAT-GROUND ASSUMPTION. Deliberately not corrected.
+
+# ── Measured pitch, which the flat-ground assumption above ignores ───────────
+# Camera-to-road pitch from the same plane fits. This is the RIGHT quantity:
+# OXTS reports vehicle pitch in the navigation frame, which includes road grade
+# and overstated this by 2-3x (docs/decisions.md D-009, D-016).
+#
+# Recorded here so the sensitivity analysis uses the real distribution rather
+# than a hypothetical sweep. NOT read by the estimator.
+measured_pitch:
+  mean_deg: 0.150
+  std_deg: 0.319
+  abs_p95_deg: 0.715
+  abs_max_deg: 0.937
+  n_frames: 134
+  caveat: >
+    Measured on drives containing no hard braking. The ego vehicle pitches most
+    under exactly the deceleration an FCW system exists for, so this is a floor
+    on the operational distribution, not the whole of it.
+
+# ── Object height priors ─────────────────────────────────────────────────────
+# Priors are set on DEV and applied to VAL. Setting them from val and then
+# evaluating on val would be leakage, and would report a prior that had already
+# seen its own test set.
+#
+# The pooled-group priors are the operative ones: detection is class-agnostic
+# with only a vehicle/VRU split (D-014), so the estimator genuinely cannot know
+# whether a box holds a hatchback or a van. Its prior must span both, and the
+# pooled spread is the honest input -- 20.1% for vehicles, not the 8.2% a
+# Car-only prior would suggest.
+priors:
+  vehicle:
+    height_m: 1.585          # dev, N=9 pooled Car+Van
+    height_std_m: 0.390      # CV 24.6% on dev; val measures 20.1%
+    source: "dev split tracklet dimensions (2011_09_26_drive_0013)"
+    transfer_error_pct: -0.6 # dev 1.585 vs val 1.595 -- systematic range bias
+  vru:
+    height_m: 1.700          # adult standing stature; dev has NO VRU labels
+    height_std_m: 0.147      # val-measured spread, used for the budget only
+    source: "nominal adult stature; dev contains zero pedestrians or cyclists"
+    transfer_error_pct: 0.4  # nominal 1.700 vs val 1.694
+
+# ── Contact-point validity ───────────────────────────────────────────────────
+contact_point:
+  # A box bottom is a ground contact point only if the object rests on the road
+  # and the box is not clipped at the image edge. Boxes touching the bottom row
+  # have no visible contact point and are excluded rather than guessed at.
+  min_rows_from_bottom: 2
+  # Below this, the object is at or above the horizon and the range diverges.
+  min_pixels_below_horizon: 3

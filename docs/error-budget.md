@@ -91,39 +91,67 @@ replaces this table with observed error.
 
 ### Stage 1b — Pitch · **PARTLY MEASURED**
 
-Flat-ground contact-point geometry assumes zero camera pitch. A pitch error `θ`
-displaces the apparent contact row, and for a camera at height `H_cam` the range
-error is approximately `δD/D ≈ D·θ/H_cam` for small `θ` — i.e. **pitch error also
-grows with range.**
+Flat-ground contact-point geometry assumes zero camera pitch. Assuming zero when
+the truth is `θ` gives, **exactly**:
 
-**Measured on val ([D-009](decisions.md)) — this exceeds the threshold:**
+```
+D_est = D / (1 − x)        x = tan(θ) · D / h_cam
+δD/D  = x / (1 − x)
+```
 
-| drive | mean | peak-to-peak |
-|---|---|---|
-| 0059 | −0.257° | 1.117° |
-| **0084** | **+1.026°** | **2.011°** |
-| **0091** | +0.423° | **2.221°** |
-| 0056 | +0.425° | 1.126° |
-| 0027 | +0.390° | 0.471° |
+**This is superlinear in range, and it diverges** at `D = h_cam/tan(θ)` — the
+range at which the contact point reaches the assumed horizon, where the estimator
+abstains rather than returning a huge number.
 
-The charter's stated sensitivity is that **2° alone exceeds 10% range error**.
-Two of five val drives *reach or exceed* that, on ordinary city driving with **no
-hard braking** — and the ego vehicle pitches most during exactly the braking
-manoeuvre an FCW system exists for.
+The commonly quoted `δD/D ≈ x` is only the first-order expansion and understates
+the cost badly where it matters. A unit test against a synthetically pitched
+projection caught this being used as if it were exact:
 
-`0084`'s **sustained +1.026° mean** is the more dangerous number: a standing
-offset across a whole drive is a systematic range bias, not an excursion, and no
-temporal filter removes it. At 30 m with a 1.65 m camera height, ~1° of
-uncorrected pitch is on the order of a 30% range error — **two orders of
-magnitude larger than the 0.25 m ground-truth budget.** Dev's 1.05° understated
-this.
+| range | x | linearised | **exact** |
+|---|---|---|---|
+| 10 m | 0.075 | 7.5% | **8.2%** |
+| 20 m | 0.151 | 15.1% | **17.8%** |
+| 30 m | 0.226 | 22.6% | **29.2%** |
+| 50 m | 0.377 | 37.7% | **60.5%** |
 
-**Not yet corrected, and deliberately so.** OXTS reports *vehicle* pitch in the
-navigation frame; the geometry needs *camera* pitch relative to the local road
-plane, which differs by suspension travel, road grade, and mounting error.
-Subtracting one for the other would look like a correction while correcting the
-wrong angle. Phase 3 decides: estimate pitch from the horizon row, or characterise
-the degradation with a measured sensitivity curve. **Silence is not an option.**
+*(at the measured val p95 pitch of 0.715°, h_cam = 1.655 m)*
+
+### The pitch magnitude, now measured correctly · **MEASURED**
+
+Earlier drafts of this file used **OXTS vehicle pitch** and reported 2.01–2.22°
+peak-to-peak with a sustained +1.03° offset. **That was the wrong quantity and it
+overstated the real error by 2–3×.** OXTS reports vehicle attitude in the
+*navigation* frame, which includes **road grade**: driving up a hill tilts the
+vehicle while the camera stays aligned with the road surface it is looking at.
+
+Fitting the road plane to LiDAR returns (`aps/groundplane.py`) measures the angle
+the geometry actually needs — camera relative to the local road — in the right
+frame ([D-016](decisions.md)):
+
+| | camera-to-road pitch (val, N=134) |
+|---|---|
+| mean | **+0.150°** |
+| std | 0.319° |
+| \|pitch\| p95 | **0.715°** |
+| \|pitch\| max | 0.937° |
+
+The same fits give **camera height 1.655 m** (std 0.027, range 1.583–1.745),
+which is the nominal the estimator now uses.
+
+**The concern was right; the magnitude was wrong.** Even at 0.715°, the exact
+relation above costs **29% at 30 m and 60% at 50 m** — so pitch remains a first-
+order term, and the flat-ground assumption is expensive at range. It is simply
+not the 2°-scale catastrophe the OXTS figures implied.
+
+**Caveat that must travel with these numbers:** measured on drives containing no
+hard braking. The ego vehicle pitches most under exactly the deceleration an FCW
+system exists for, so this distribution is a **floor**, not the operational range.
+
+**Decision: characterise, do not correct** ([D-016](decisions.md)). A horizon-row
+pitch estimator would need validating against a reference, and OXTS is not that
+reference. The measured distribution above turns the sensitivity analysis from a
+hypothetical sweep into a statement about what the assumption actually costs on
+this data.
 
 ---
 

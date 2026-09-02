@@ -218,3 +218,78 @@ range, which Phase 3 consumes directly.
 headline artifact. **The pitch decision blocks it** and cannot be deferred: val
 pitch reaches 2.01°/2.22° peak-to-peak with a sustained +1.03° offset on `0084`,
 which is ~2 orders of magnitude larger than the 0.25 m ground-truth budget.
+
+---
+
+## 2026-09-02 (cont.) — Phase 3: the headline artifact
+
+The pitch decision was settled first, and the answer changed on measurement.
+
+### Pitch: the concern was right, the number was wrong
+
+The choice was **characterise the flat-ground assumption, don't correct it** — a
+horizon-row estimator would need validating against a reference, and OXTS is not
+that reference.
+
+But rather than sweep hypothetical pitch values, a road plane fitted to LiDAR
+(RANSAC + least-squares refit on the consensus set) measures the *actual*
+camera-to-road angle. It recovered KITTI's documented mounting independently
+(velodyne 1.713 m against a documented 1.73 m; camera 1.655 m) — and then
+overturned the previous day's alarm:
+
+| | OXTS (wrong quantity) | LiDAR road plane |
+|---|---|---|
+| spread | 2.01–2.22° p2p | std **0.319°** |
+| sustained offset | +1.026° | mean **+0.150°** |
+| worst | — | \|p95\| **0.715°** |
+
+OXTS reports navigation-frame vehicle attitude, which includes **road grade** —
+driving uphill registers as pitch while the camera stays aligned with the road.
+That confound was named in D-009 and then quoted past anyway. Corrected in
+[D-016](decisions.md).
+
+### Two errors caught by unit tests, both flattering the method
+
+1. **The linearised pitch formula used as if exact.** `δD/D ≈ tan(θ)·D/h` is a
+   first-order expansion; the exact relation `x/(1−x)` is superlinear and
+   diverges where the contact point reaches the horizon. At 50 m the
+   linearisation says 37.7% where the truth is **60.5%** — understated by a
+   third. It also moved the predicted estimator crossover from 59.7 m to 49.8 m,
+   i.e. from outside the evidence envelope to inside it.
+2. **A config gate declared and never implemented.** `min_rows_from_bottom: 2`
+   sat in `configs/camera.yaml` and was loaded by `CameraModel`, but no code read
+   it. Boxes clipped at the image edge are 4.2% of detections and carry **46.4%
+   MAPE against 13.6%** ([D-017](decisions.md)). A config value with no reader is
+   not a conservative default; it is a silent lie about what the code does.
+
+### The curve
+
+**val, N=6122.** contact-point MAPE **22.7 / 10.3 / 12.2 / 18.7 / 24.0%**;
+size-prior **29.5 / 14.9 / 11.0 / 15.3 / 16.5%**. Credible envelope **10–30 m at
+≤15% MAPE**; no bin reaches 10%.
+
+**It is U-shaped.** Worst in the near field, not at range — the opposite of what
+the pinhole argument alone predicts, and the most uncomfortable result the
+project has produced.
+
+### Why: the detector, not the geometry
+
+Implied object height (`box_h × range / f_y`, which must be range-independent)
+is **1.400 m at 0–10 m against a true 1.595 m**, 5–8% low elsewhere. Detector
+boxes are systematically undersized, worst near, and both estimators inherit it
+as a range over-estimate.
+
+The error budget predicted detector box error would dominate. It does — but as a
+**bias, not jitter**, so nothing that averages over frames will remove it.
+
+This also explains why the pitch stratification is **flat** (14.1 / 15.6 / 13.8 /
+14.7%) where the geometry predicts an 8× span: box bias swamps the pitch term at
+the magnitudes present. **Correcting pitch would have bought almost nothing** —
+which retroactively validates the decision to characterise it. Pitch becomes the
+binding constraint only once the box bias is addressed.
+
+**Landed:** 95 tests, ruff + black clean. `aps/geometry.py`, `aps/groundplane.py`,
+`eval/eval_range.py`, `configs/camera.yaml`.
+
+**Next:** Phase 4 — tracking. IoU baseline then SORT, with MOTA / IDF1 /
+ID-switches on identical data.

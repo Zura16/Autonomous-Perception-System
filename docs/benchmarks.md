@@ -345,6 +345,161 @@ every time the envelope is quoted, because they are not the same claim.
 
 ---
 
+## Phase 3 — Monocular range: the error-vs-range curve
+
+**The project's headline artifact.** Detector boxes (YOLOv8n, conf 0.25), graded
+by the Phase 1 LiDAR ruler applied to *those same boxes* — no label matching
+anywhere. **Split:** val, N = 6122 detections with valid ground truth.
+Camera assumes a fixed **1.655 m height and zero pitch** ([D-016](decisions.md)).
+
+### Row 3.1 — Error vs range ← **THE HEADLINE**
+
+**contact-point** `D = f·h_cam/(v_bottom − v_horizon)` — valid on 98%
+
+| bin (m) | N | MAE | MAPE | bias | p95 \|e\| |
+|---|---|---|---|---|---|
+| 0–10 | 1006 | 1.28 | **22.7%** | +1.05 | 2.86 |
+| 10–20 | 2285 | 1.51 | **10.3%** | +0.48 | 3.97 |
+| 20–30 | 1635 | 3.03 | 12.2% | +0.10 | 7.28 |
+| 30–50 | 984 | 7.11 | 18.7% | +0.91 | 22.27 |
+| 50+ | 91 | 13.72 | 24.0% | −5.87 | 30.44 |
+| **all** | **6001** | **2.99** | **14.5%** | +0.45 | 9.80 |
+
+**size-prior** `D = f·H_prior/h_box` — valid on 98%
+
+| bin (m) | N | MAE | MAPE | bias | p95 \|e\| |
+|---|---|---|---|---|---|
+| 0–10 | 1007 | 1.73 | **29.5%** | +1.48 | 5.52 |
+| 10–20 | 2287 | 2.15 | 14.9% | +1.68 | 6.94 |
+| 20–30 | 1635 | 2.68 | **11.0%** | +1.82 | 8.81 |
+| 30–50 | 984 | 5.80 | 15.3% | +3.40 | 15.68 |
+| 50+ | 91 | 9.83 | 16.5% | −7.50 | 26.64 |
+| **all** | **6004** | **2.94** | **16.4%** | +1.83 | 10.15 |
+
+**The curve is U-shaped, not monotonic.** Error is *worst at the near field*,
+best at 10–20 m, then degrades with range. That is the opposite of what the
+pinhole sensitivity argument alone predicts, and Row 3.4 explains why.
+
+### Row 3.2 — Credible operating envelope
+
+Best estimator per bin, against a MAPE threshold:
+
+| threshold | 0–10 | 10–20 | 20–30 | 30–50 | 50+ | envelope |
+|---|---|---|---|---|---|---|
+| ≤ 10% | fail (23%) | fail (10.3%) | fail (11%) | fail (15%) | fail (17%) | **none** |
+| ≤ 15% | fail | **PASS** | **PASS** | fail | fail | **10–30 m** |
+| ≤ 20% | fail | PASS | PASS | PASS | PASS | 10–50+ m |
+| ≤ 25% | PASS | PASS | PASS | PASS | PASS | 0–50+ m |
+
+**No range bin achieves 10% MAPE.** The best figure anywhere is **10.3% at
+10–20 m**.
+
+**The credible envelope at 15% MAPE is 10–30 m — and it excludes the near
+field.** A collision-warning system that is least accurate at the closest ranges
+is a real and uncomfortable result; it is stated rather than smoothed over.
+
+Two limits bound any wider claim: the 50+ m bin rests on **91 detections**
+([D-015](decisions.md)), and the whole curve is measured on the ~33% of objects
+that are both detected and groundtruthable, so it is a **lower bound**.
+
+### Row 3.3 — Which estimator wins, and the predicted crossover
+
+| bin (m) | N | contact-point | size-prior | winner |
+|---|---|---|---|---|
+| 0–10 | 1006 | **22.7%** | 29.5% | contact-point |
+| 10–20 | 2285 | **10.3%** | 14.9% | contact-point |
+| 20–30 | 1635 | 12.2% | **11.0%** | size-prior |
+| 30–50 | 984 | 18.7% | **15.3%** | size-prior |
+| 50+ | 91 | 24.0% | **16.5%** | size-prior |
+
+**A crossover exists, at ~20 m**, in the predicted direction: contact-point near,
+size-prior far.
+
+Predicted from the error budget (exact relation, [D-016](decisions.md)):
+
+| group | prior CV | at typical pitch 0.319° | at p95 pitch 0.715° |
+|---|---|---|---|
+| vehicle | 20.1% | 49.7 m | 22.2 m |
+| VRU | 8.7% | 23.8 m | 10.6 m |
+
+The observed ~20 m sits near the p95-pitch predictions. **This agreement should
+not be read as confirming the pitch model** — Row 3.4 shows pitch is not what
+drives the error, so the crossover is real but its predicted mechanism is not the
+operative one.
+
+### Row 3.4 — Pitch sensitivity: the assumption is NOT the bottleneck
+
+Pitch measured per frame from LiDAR, used only to stratify; the estimator always
+assumed 0.0°.
+
+| \|pitch\| | N | measured MAPE | **predicted MAPE at 30 m** |
+|---|---|---|---|
+| 0.0–0.2° | 2967 | 14.1% | 3.2% |
+| 0.2–0.4° | 1537 | 15.6% | 9.5% |
+| 0.4–0.6° | 841 | 13.8% | 15.8% |
+| 0.6°+ | 656 | 14.7% | 25.3% |
+
+**Measured error is flat across pitch while the prediction spans 8×.** The
+flat-ground assumption costs far less than the geometry says it should, because
+something larger is masking it.
+
+**This retroactively validates characterising rather than correcting pitch
+([D-016](decisions.md)): a pitch correction would have bought almost nothing.**
+
+### Row 3.5 — What actually dominates: detector box height bias
+
+Implied object height, `box_height_px × gt_range / f_y`, which should be
+range-independent and equal the true object height:
+
+| bin (m) | implied vehicle height | vs true 1.595 m |
+|---|---|---|
+| 0–10 | **1.400 m** | **−12.2%** |
+| 10–20 | 1.497 m | −6.1% |
+| 20–30 | 1.520 m | −4.7% |
+| 30–50 | 1.467 m | −8.0% |
+| 50+ | 1.737 m | +8.9% |
+
+**Detector boxes are systematically shorter than the objects they contain**, by
+~5–12%, worst in the near field. Both estimators inherit it as a range
+over-estimate — which is exactly the positive bias in Row 3.1 — and it is the U
+shape's cause.
+
+The error budget predicted detector box error would be the dominant term. It is —
+but it is a **bias, not jitter**, and a bias does not average away over frames.
+
+### Row 3.6 — Boxes clipped at the image edge
+
+| | val |
+|---|---|
+| share of detections | **4.2%** |
+| MAPE, clipped | **46.4%** |
+| MAPE, unclipped | 13.6% |
+
+An object running past the bottom image edge has no observable contact point and
+a truncated pixel height, so both estimators are reading the sensor boundary
+rather than the object. Both now abstain ([D-017](decisions.md)). The gate was
+declared in `configs/camera.yaml` from the start and **not implemented**; adding
+it moved the 0–10 m bin from 24.4% to 22.7% MAPE and the overall figure from
+15.0% to 14.5%.
+
+### Row 3.7 — Camera geometry, measured from LiDAR
+
+| | val, N=134 frames |
+|---|---|
+| camera height above road | **1.655 m** (std 0.027, range 1.583–1.745) |
+| camera-to-road pitch | mean **+0.150°**, std 0.319° |
+| \|pitch\| p95 / max | **0.715° / 0.937°** |
+
+Independently recovers KITTI's documented mounting. **Supersedes the OXTS-derived
+pitch figures** (2.01–2.22° p2p, +1.03° sustained), which measured vehicle
+attitude in the navigation frame — including road grade — and overstated the real
+camera-to-road error by 2–3× ([D-016](decisions.md)).
+
+**Caveat on every pitch figure here:** measured on drives with no hard braking,
+so this is a floor on the operational distribution.
+
+---
+
 ## Pending — nothing measured yet
 
 These rows are deliberately empty. A value here that is not a measurement is the
@@ -352,8 +507,6 @@ failure mode this file exists to prevent.
 
 | Row | Blocks on |
 |---|---|
-| 3.x — **Monocular range error vs range** ← headline | Phase 3 |
-| 3.y — Credible operating envelope (range where error < X%) | Phase 3 |
 | 4.x — Tracking MOTA / IDF1 / ID-switches, IoU vs SORT | Phase 4 |
 | 5.x — Closing-speed error; TTC error at TTC < 3 s | Phase 5 |
 | 6.x — Lane departure detection rate / FP rate | Phase 6 |

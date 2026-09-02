@@ -61,7 +61,7 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 2. **Never report a single accuracy figure for monocular range.** Report **error vs. range**, binned (0–10 / 10–20 / 20–30 / 30–50 / 50+ m), with MAE, MAPE, and spread. A lone "±2 m" headline conceals that pinhole sensitivity is worst at distance — which is exactly what a good interviewer is probing for.
 3. **Never differentiate distance to obtain velocity.** Use the scale relation `Ḋ = −D·ḣ/h` with a Kalman filter over the image-plane state, so range, closing speed, and TTC derive from one consistent state and can never contradict each other.
 4. **Phantom closing speed is a bug, not noise.** A parked vehicle must produce ≈0 closing speed. A deadband on the closing rate is mandatory, and its threshold is a logged decision with a measured false-trigger rate.
-5. **State the pitch assumption everywhere it bites.** Flat-ground contact-point geometry assumes zero camera pitch; a 2° error alone already exceeds 10% range error — and the ego vehicle pitches precisely when braking. Either estimate pitch or document the degradation with numbers. Silence is not an option. *(Measured on val: **2.01° and 2.22° peak-to-peak** on two of five drives, plus a sustained **+1.03° mean** on `0084` — all without hard braking. This now EXCEEDS the stated threshold and is larger than the entire GT budget; Phase 3 cannot defer it — [D-009](docs/decisions.md).)*
+5. **State the pitch assumption everywhere it bites.** Flat-ground contact-point geometry assumes zero camera pitch. **RESOLVED by measurement ([D-016](docs/decisions.md)):** true camera-to-road pitch, from a LiDAR road-plane fit, is mean +0.150° with \|p95\| **0.715°** — the earlier OXTS figures (2.0–2.2°) were the wrong quantity and overstated it 2–3×. Decision: **characterise, do not correct**, with a measured sensitivity curve (Row 3.4). Measured error turns out **flat across pitch**, because detector box bias masks it ([D-017](docs/decisions.md)). Pitch becomes the binding constraint only once the box bias is fixed.
 6. **Object-size priors carry their variance.** A prior without a variance is a guess wearing a lab coat.
 7. **The decision layer is evaluated as a detector, never demoed.** FCW/AEB-request logic reports true-positive rate **and false positives per hour of video**, at a named TTC threshold. FP rate is the number that matters: a phantom brake at highway speed is itself the crash.
 8. **Trackers are measured, not eyeballed.** Report MOTA / IDF1 / ID-switches, and land a SORT comparison. "The boxes look stable" is not a result.
@@ -103,15 +103,18 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Detection recall vs range (conf 0.25) | **86 / 76 / 65 / 46 / 24 %** · VRU **75 / 69 / 36 / 2 / 0 %** |
 | Detection latency (M2 MPS, 640px, batch 1) | p50 **17.12** · p95 24.75 · p99 **34.01 ms** = 33% of budget · **5/1450 frames over budget**, max 553 ms |
 | **Evaluation envelope** | **0–50 m** — bounded by evidence, not accuracy. Usable N/bin: 430/1142/793/475/**30** ([D-015](docs/decisions.md)) |
-| **Range error by bin** (0–10 / 10–20 / 20–30 / 30–50 / 50+ m) | TBD / TBD / TBD / TBD / TBD |
-| **Credible operating envelope** (range where error < X%) | TBD ← *the project's headline number* |
+| **Range MAPE by bin** — contact-point | **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %** (MAE 1.28/1.51/3.03/7.11/13.72 m) |
+| **Range MAPE by bin** — size-prior | **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %** |
+| **Credible operating envelope** | **10–30 m at ≤15% MAPE.** No bin reaches 10%; best is 10.3% at 10–20 m. Excludes the near field |
+| Camera geometry (LiDAR-measured) | height **1.655 m** (std 0.027) · camera-to-road pitch mean +0.150°, \|p95\| **0.715°** |
+| Dominant error source | **detector box height bias**, −12% at 0–10 m, −5..8% elsewhere. A bias, not jitter ([D-017](docs/decisions.md)) |
 | Closing-speed error vs GT | TBD |
 | TTC error where it matters (TTC < 3 s) | TBD |
 | Tracking MOTA / IDF1 / ID-switches — IoU vs SORT | TBD |
 | Lane departure detection rate / FP rate (labeled set) | TBD |
 | FCW: TPR and **FP per hour**, at threshold TTC = TBD | TBD |
 | Per-stage latency p50/p95/p99 | detection only so far — see above. Track/range/KF/decide not yet measured |
-| Test suite count | **68** |
+| Test suite count | **95** |
 
 ## Common commands (run from repo root)
 
@@ -152,7 +155,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - [x] **Phase 0 — Repo + dataset + one frame.** KITTI loader, calibration parsed, one frame rendered with boxes. Environment fingerprinted.
 - [x] **Phase 1 — Ground truth harness.** Project LiDAR into the image; per-detection GT range, with the ruler's own error and coverage characterised by range bin.
 - [x] **Phase 2 — Detection baseline.** YOLOv8n zero-shot: AP 0.615 class-agnostic, recall-vs-range measured, latency at 33% of budget at p99. No optimization — nothing missed the budget except five host stalls ([D-012](docs/decisions.md)).
-- [ ] **Phase 3 — Monocular range + error-vs-range curve.** Pitch handling decided and justified. **This curve is the headline artifact of the whole project.**
+- [x] **Phase 3 — Monocular range + error-vs-range curve.** ✅ Two estimators, pitch characterised not corrected, envelope **10–30 m at ≤15% MAPE**. Headline artifact landed.
 - [ ] **Phase 4 — Tracking.** IoU baseline → SORT. MOTA/IDF1/ID-switches for both, honestly compared.
 - [ ] **Phase 5 — Closing speed + TTC.** Scale-rate estimator, KF over image-plane state, deadband. Validate on synthetic constant-velocity sequences first, then real data.
 - [ ] **Phase 6 — Lane detection + departure metric.** Scored on a labeled set. Failure set documented with frames.
@@ -164,15 +167,15 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 2 COMPLETE** (2026-09-02). Phases 0–1 ✅. **Next: Phase 3 — monocular range + the error-vs-range curve**, the project's headline artifact.
-- **BLOCKING Phase 3: the pitch decision.** Val drives reach **2.01°/2.22° peak-to-peak** and `0084` carries a **sustained +1.026° mean** — above the 2° / >10%-range-error threshold, with no hard braking, and ~2 orders of magnitude larger than the 0.25 m GT budget. Estimate pitch from the horizon row, or publish a measured sensitivity curve. Not deferrable ([D-009](docs/decisions.md)).
-- **The ruler (val, N=8705).** `shrink_p20` + spread gate: MAE **0.25 m**, median 0.17, p95 0.63, failure rate **0.27%**; by bin **0.21 / 0.24 / 0.25 / 0.27 / 0.78 m**.
-- **Detection (val, YOLOv8n zero-shot).** Class-agnostic AP@0.5 **0.615** (vehicle 0.662, VRU 0.450). Recall vs range **86/76/65/46/24%**; **VRU collapses to 2% at 30–50 m and 0% beyond** — the safety-critical class is bounded at ~30 m by detection alone. Mechanism is apparent size, not range: recall tracks pixel height (31% under 25 px, 81% over 80 px).
-- **Latency: 33% of budget at p99** (17.12 / 24.75 / 34.01 ms vs 103.56). But **5 frames of 1450 exceeded the budget**, max 553 ms — host stalls the p99 hides. No optimization warranted ([D-012](docs/decisions.md)).
-- **THE structural finding ([D-015](docs/decisions.md)).** Phase 3 needs labels that are *both* detected and groundtruthable. Per-label join: **430 / 1142 / 793 / 475 / 30** usable objects per range bin. **The 50+ bin has 30 objects** — the same order as the ten-box dev sample that produced a false figure on 09-01. **The credible envelope is 0–50 m, bounded by evidence availability, not by estimator accuracy** — a distinction to state every time it is quoted.
-- **Verified:** 68 tests, ruff + black clean. Detections cached to `artifacts/detections_val.npz` (detector boxes + matched GT range) — Phase 3 consumes this directly.
-- **Known issues:** KITTI raw does not label every object, so precision (and AP) is pessimistic by an unmeasured amount · `0027` has 69 boxes · no CUDA ([D-012](docs/decisions.md)) · test split deliberately unaudited.
-- **Standing warning:** draft resume bullets exist describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo**. That is not this system. Claims get generated from `benchmarks.md` in Phase 9.
+- **Phase:** **Phase 3 COMPLETE** (2026-09-02). Phases 0–2 ✅. **Next: Phase 4 — tracking (IoU baseline → SORT), MOTA/IDF1/ID-switches.**
+- **THE HEADLINE (val, N=6122 detections).** Monocular range MAPE by bin, contact-point **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %**. **Credible envelope: 10–30 m at ≤15% MAPE. No bin reaches 10%.** Graded by the Phase 1 ruler on the detector's own boxes — no label matching.
+- **The curve is U-shaped and that is the finding.** Error is *worst in the near field* (22.7% inside 10 m), not at range. A collision-warning system least accurate where collision is most imminent is uncomfortable and is reported, not smoothed.
+- **Cause: detector box height bias ([D-017](docs/decisions.md)).** Implied object height is **1.400 m at 0–10 m against a true 1.595 m (−12%)**, 5–8% low elsewhere. Both estimators inherit it as a range over-estimate. It is a **bias, not jitter** — temporal filtering and the Phase 5 KF will not touch it.
+- **Pitch: resolved, and smaller than feared ([D-016](docs/decisions.md)).** LiDAR road-plane fit gives true camera-to-road pitch mean **+0.150°**, \|p95\| **0.715°**, camera height **1.655 m**. The earlier OXTS figures (2.0–2.2°) were the wrong quantity — navigation-frame vehicle pitch includes road grade — and overstated it 2–3×. Measured error is **flat across pitch** while the geometry predicts an 8× span, so pitch is currently masked by box bias. **Correcting pitch would have bought almost nothing**, which validates characterising it.
+- **Estimator crossover at ~20 m**, in the predicted direction (contact-point near, size-prior far). Do *not* read this as confirming the pitch model — Row 3.4 shows pitch is not the operative mechanism.
+- **Verified:** 95 tests, ruff + black clean. Two errors caught by tests this session: the linearised pitch formula used as if exact (understating cost by a third at 50 m), and a config gate (`min_rows_from_bottom`) declared but never implemented.
+- **Known issues:** 50+ bin rests on 91 detections · whole curve measured on the ~33% of objects both detected and groundtruthable, so it is a **lower bound** · no box-height calibration applied (fitting one on val would be tuning on the eval set) · pitch measured only on drives without hard braking.
+- **Standing warning:** draft resume bullets describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo** are not this system. Claims get generated from `benchmarks.md` in Phase 9.
 
 ## Project skills (slash commands)
 

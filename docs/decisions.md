@@ -186,7 +186,7 @@ appear in `benchmarks.md` or be compared against. A baseline requires a number.
 
 ---
 
-## D-009 · Pitch is measured from OXTS, and treated as an indicator, not a correction · 2026-09-01 · Active
+## D-009 · Pitch is measured from OXTS, and treated as an indicator, not a correction · 2026-09-01 · **PARTLY SUPERSEDED by [D-016](#d-016)**
 
 **Decision.** `Oxts.pitch_rad` is read per frame and reported. It is **not**
 currently subtracted from the geometry.
@@ -200,17 +200,21 @@ correcting for the wrong angle.
 
 **First measurement (dev, superseded).** `drive_0013`: peak-to-peak 1.05°.
 
-**Val measurement, 2026-09-02 — this changes the conclusion.** Across five val
-drives, peak-to-peak pitch reaches **2.011° (`0084`)** and **2.221° (`0091`)** —
-*exceeding* the 2° level the charter states already costs >10% range error, on
-ordinary city driving with **no hard braking**. `0084` also carries a sustained
-**+1.026° mean**: a standing offset across an entire drive, which appears as a
-systematic range bias rather than as noise, and which no amount of temporal
-filtering removes.
+**Val OXTS measurement, 2026-09-02.** Peak-to-peak vehicle pitch reaches
+**2.011° (`0084`)** and **2.221° (`0091`)**, with a sustained +1.026° mean on
+`0084`.
 
-Dev's 1.05° was not representative. Pitch is no longer a projected concern to be
-documented; it is a measured error source larger than the entire ground-truth
-budget (0.25 m), and Phase 3 cannot defer the decision.
+**⚠ SUPERSEDED — these are the WRONG QUANTITY.** This entry already noted that
+OXTS reports vehicle pitch in the navigation frame rather than camera pitch
+relative to the road, and then quoted the OXTS figures anyway as if they sized
+the problem. They do not: navigation-frame pitch includes **road grade**, so
+driving uphill registers as pitch while the camera stays aligned with the road.
+
+Measured properly from the LiDAR road plane, camera-to-road pitch is **mean
++0.150°, std 0.319°, |p95| 0.715°** — OXTS overstated it by **2–3×**. See
+[D-016](#d-016), which supersedes the magnitudes here and the urgency drawn from
+them. The *direction* of this entry stands: OXTS is an indicator, never a
+correction. The mistake was treating an indicator as a measurement.
 
 **Open.** Phase 3 decides between (a) vanishing-point / horizon-row pitch
 estimation from the image, and (b) documenting the degradation with a measured
@@ -501,6 +505,132 @@ intersection.
 (recall), a denser LiDAR or multi-sweep aggregation (coverage), or more val
 drives with far-range labels (sample size). All three are out of scope for now;
 the envelope is stated instead of quietly worked around.
+
+---
+
+## D-016 · Characterise the flat-ground assumption; measure pitch from LiDAR, never correct with it · 2026-09-02 · Active
+
+**Decision.** The monocular estimators assume a **fixed camera height of 1.655 m
+and zero pitch**. Pitch is *not* estimated and *not* corrected. Instead the true
+camera-to-road pitch is measured per frame from LiDAR and used **only** to
+stratify the error afterwards, turning the sensitivity analysis from a
+hypothetical sweep into a statement about what the assumption costs on this data.
+
+**Why not estimate pitch.** A horizon-row or vanishing-point estimator would need
+validating against a reference, and OXTS is not that reference — see below. We
+would be checking an estimator against the wrong quantity and calling the
+agreement a result.
+
+### The correction this decision rests on
+
+[D-009](#) reported ego pitch of **2.01–2.22° peak-to-peak** with a sustained
+**+1.026° mean**, from OXTS, and concluded pitch was a near-catastrophic term
+exceeding the 2° / >10%-range-error threshold.
+
+**That was the wrong quantity.** OXTS reports vehicle attitude in the
+*navigation* frame, which includes **road grade**: driving up a hill tilts the
+vehicle while the camera stays perfectly aligned with the road surface it is
+looking at. The geometry needs camera-relative-to-road pitch, and D-009 said as
+much — but the number quoted was the OXTS one anyway.
+
+Fitting the road plane to LiDAR (`aps/groundplane.py`, RANSAC + least-squares
+refit on the consensus set) measures the right angle in the right frame:
+
+| | OXTS (wrong quantity) | **LiDAR road plane (right quantity)** |
+|---|---|---|
+| typical spread | 2.01–2.22° p2p | **std 0.319°** |
+| sustained offset | +1.026° on `0084` | mean **+0.150°** |
+| worst | — | \|pitch\| p95 **0.715°**, max **0.937°** |
+
+**OXTS overstated the real pitch error by 2–3×.** The same fits give camera
+height **1.655 m** (std 0.027, range 1.583–1.745) — independently validating
+KITTI's documented mounting and giving the estimator its nominal.
+
+**The concern was still right, just smaller.** At 0.715° the exact relation costs
+**29% at 30 m and 60% at 50 m**, so pitch remains a first-order term. It is not
+the 2°-scale catastrophe the OXTS numbers implied, and the flat-ground assumption
+is defensible inside ~20 m and expensive beyond it.
+
+### A second correction, caught by a unit test
+
+The error budget quoted `δD/D ≈ tan(θ)·D/h_cam` and used it as if exact. It is
+the **first-order expansion**. The exact relation is
+
+```
+D_est = D / (1 − x)      x = tan(θ)·D/h_cam      δD/D = x/(1 − x)
+```
+
+which is **superlinear** and diverges at `D = h_cam/tan(θ)` (132 m at p95 pitch —
+where the contact point reaches the assumed horizon and the estimator abstains).
+At 50 m the linearisation says 37.7% where the truth is **60.5%**: understated by
+a third, in the direction that flatters the method.
+
+`test_assuming_zero_pitch_when_the_camera_is_pitched_matches_the_budget_formula`
+now asserts against a synthetically pitched projection at `rel=1e-6`, so the
+linearisation cannot come back.
+
+This also moved the predicted contact-point/size-prior crossover for vehicles
+from 59.7 m to **49.8 m** — from *outside* the 0–50 m evidence envelope to just
+*inside* it, which changes whether the crossover is observable at all.
+
+**Standing caveat on every pitch number here.** Measured on drives with no hard
+braking. The ego vehicle pitches most under exactly the deceleration an FCW
+system exists for, so this distribution is a **floor** on the operational one.
+
+---
+
+## D-017 · Abstain on boxes clipped at the image edge; detector box bias is the dominant error · 2026-09-02 · Active
+
+**Decision.** Both monocular estimators abstain when the detector box touches the
+bottom image edge (within `min_rows_from_bottom = 2`).
+
+**Why.** Such an object continues below the visible image, so its ground contact
+point is not observable *and* its pixel height is truncated. Both estimators are
+then reading the sensor boundary rather than the object. Measured on val: these
+are **4.2% of detections** and carry **46.4% MAPE against 13.6%** for the rest.
+
+**A gate that was declared and never implemented.** `configs/camera.yaml` has
+carried `min_rows_from_bottom: 2` since Phase 3 began, and `CameraModel` loaded
+it — but no code ever read it. The near-field error looked like geometry until
+the saved `box_bottom` column showed 22.8% of 0–10 m boxes sitting on the image
+edge. Implementing it moved 0–10 m from 24.4% to 22.7% MAPE and the overall
+figure from 15.0% to 14.5%.
+
+*Lesson worth more than the fix: a config value with no reader is not a
+conservative default, it is a silent lie about what the code does.*
+
+### The larger finding this uncovered
+
+Clipping was not the main story. Computing the **implied object height**
+(`box_height_px × gt_range / f_y`, which must be range-independent and equal to
+the true height) exposed a systematic detector bias:
+
+| bin (m) | implied vehicle height | vs true 1.595 m |
+|---|---|---|
+| 0–10 | **1.400 m** | **−12.2%** |
+| 10–20 | 1.497 m | −6.1% |
+| 20–30 | 1.520 m | −4.7% |
+| 30–50 | 1.467 m | −8.0% |
+
+**Detector boxes are systematically shorter than the objects they contain**, by
+5–12%, worst in the near field. Both estimators inherit this one-for-one as a
+range over-estimate, which is precisely the positive bias in Row 3.1 and the
+cause of the error curve's U shape.
+
+`docs/error-budget.md` predicted detector box error would dominate. It does — but
+it is a **bias, not jitter**. Jitter averages out across frames and inflates
+variance; a bias does neither. Every mitigation that would work on jitter
+(temporal filtering, the Phase 5 Kalman filter) will leave this untouched.
+
+**Consequences accepted for now.** No box-height calibration is applied. Fitting
+a per-range correction on val would be tuning on the evaluation set, and the
+honest figure is the uncorrected one. If it is ever corrected, the correction is
+fitted on dev and the val figure reported both ways.
+
+**This also explains Row 3.4.** Pitch stratification shows a flat error curve
+where the geometry predicts an 8× span — because box bias, at 5–12%, swamps the
+pitch term at the magnitudes actually present (|p95| 0.715°). The flat-ground
+assumption is not this system's bottleneck; the detector is.
 
 ---
 

@@ -115,11 +115,45 @@ manoeuvre is the case the system exists for.
 81% visible → 53% partly occluded → 21% fully occluded. Compounds with FM-1:
 occluded objects are both harder to detect *and* impossible to ground-truth,
 which is why the compound coverage in Row 2.6 is what bounds Phase 3.
-## Monocular range (Phase 3) — not yet characterised
+## Monocular range (Phase 3)
 
-Expected, from the error budget and to be confirmed or refuted with frames:
-pitch excursion under braking, non-flat road, class-height prior variance,
-truncated and small-box regimes.
+### FM-9 · The near field is the WORST field · **CONFIRMED**
+
+**Condition:** objects inside 10 m.
+
+**Behaviour:** MAPE **22.7%** (contact-point) and **29.5%** (size-prior) — worse
+than any other bin, including 50+ m. The error curve is U-shaped, not monotonic.
+
+**Why it matters:** a collision-warning system is least accurate exactly where a
+collision is most imminent. This is the single most uncomfortable result in the
+project and is reported in the README rather than buried.
+
+**Mechanism:** FM-10, not geometry.
+
+### FM-10 · Detector boxes are systematically undersized · **CONFIRMED**
+
+**Condition:** all ranges; worst inside 10 m.
+
+**Behaviour:** implied object height (`box_h × range / f_y`) is 1.400 m at
+0–10 m against a true 1.595 m — **−12%** — and 5–8% low elsewhere. Both
+estimators inherit it as a range over-estimate.
+
+**Why it is worse than noise:** it is a **bias**. Temporal filtering and the
+Phase 5 Kalman filter reduce jitter and will not touch this.
+
+### FM-11 · Boxes clipped at the image edge · **CONFIRMED**
+
+4.2% of detections, **46.4% MAPE against 13.6%**. The contact point lies outside
+the picture and the pixel height is truncated. Both estimators now abstain
+([D-017](decisions.md)).
+
+### FM-12 · Pitch is a real term that is currently invisible · **CONFIRMED**
+
+Stratifying by measured camera-to-road pitch gives a **flat** error curve
+(14.1 / 15.6 / 13.8 / 14.7%) where the geometry predicts an 8× span
+(3.2 → 25.3%). Pitch is not wrong — it is masked by FM-10. **If the box bias is
+ever fixed, pitch becomes the next binding constraint**, and the sensitivity
+curve in Row 3.4 is what says so.
 
 ## Tracking (Phase 4) — not yet characterised
 ## Lane detection (Phase 6) — not yet characterised
