@@ -86,8 +86,35 @@ replaces this table with observed error.
 | Detector box jitter | Phase 2 | The dominant term. Multiply the table above by the measured jitter in px |
 | **Camera pitch** | Partly measured | See Stage 1b |
 | Class-height prior variance | Phase 3 | Vehicle width alone spans >400 mm compact→SUV. A prior without a variance is a guess ([hard rule 6](../CLAUDE.md)) |
-| Ground-plane non-flatness | Unquantified | Contact-point geometry assumes a flat road |
+| **Ground-plane non-flatness** | **MEASURED** | The dominant far-range term. Road falls ~10 cm below the assumed plane by 50 m; predicts −0.6 m at 20–25 m and −2.5 m at 40–50 m, matching observation to ~0.1–0.4 m ([D-020](decisions.md)) |
 | Intrinsics error | Negligible | KITTI calibration; not re-estimated here |
+
+### Stage 1a — Ground-plane non-flatness · **MEASURED, and it dominates at range**
+
+The flat-ground assumption is not a rounding error; it is the **largest single
+term in the contact-point estimator beyond 20 m**.
+
+A contact point at depth `D` on ground at real height `y_act` gives
+`D_est = D·h_cam/y_act`, so the fractional bias is `h_cam/y_act − 1` — computable
+outright from a measured road profile, with no fitting.
+
+| depth (m) | measured road height | vs assumed 1.655 m | predicted bias |
+|---|---|---|---|
+| 5–8 | 1.668 | +0.013 | −0.05 m |
+| 20–25 | 1.699 | +0.044 | −0.59 m |
+| 30–40 | 1.741 | +0.086 | −1.73 m |
+| 40–50 | 1.751 | +0.096 | −2.46 m |
+
+Observed vehicle bias at those ranges is −0.50, −2.26 and −2.12 m: the road
+profile accounts for most of it beyond 20 m ([D-020](decisions.md)).
+
+**Consequence for the estimator.** Contact-point range at distance is limited by
+the *road*, not by the camera or the detector. Improving it needs a road-profile
+estimate from the image — a research problem, not a tuning exercise — which is
+why the flat-ground assumption is *characterised* rather than corrected.
+
+**Inside ~13 m the road explains almost nothing**, and a flat **+0.7 m** residual
+remains, ~0.3 m of it vehicle-specific. That is the project's open question.
 
 ### Stage 1b — Pitch · **PARTLY MEASURED**
 

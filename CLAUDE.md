@@ -108,7 +108,8 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | **Credible operating envelope** | **10–30 m at ≤15% MAPE.** No bin reaches 10%; best is 10.3% at 10–20 m. Excludes the near field |
 | Camera geometry (LiDAR-measured) | height **1.655 m** (std 0.027) · camera-to-road pitch mean +0.150°, \|p95\| **0.715°** |
 | Detector box height bias (val, 5254 pairs) | **−4.5% overall · −7.1% at 0–10 m** · bottom edge −4.8 px near. A bias, not jitter ([D-018](docs/decisions.md)) |
-| Near-field error cause | **UNIDENTIFIED.** Box bias explains ~17% of the 0–10 m bias, ~80% at mid range |
+| Far-range error cause | **road non-flatness** — road 10 cm below the assumed plane by 50 m; explains most of the bias beyond 20 m ([D-020](docs/decisions.md)) |
+| Near-field error cause | **UNIDENTIFIED** — flat +0.7 m residual inside 13 m; ~0.3 m vehicle-specific, ~0.4 m common |
 | Closing-speed error vs GT | TBD |
 | TTC error where it matters (TTC < 3 s) | TBD |
 | Tracking MOTA / IDF1 / ID-switches — IoU vs SORT | TBD |
@@ -134,6 +135,7 @@ python tools/render_frame.py --drive 2011_09_26_drive_0013 --frame 20 \
 # ── Evaluate (always before performance or visual work)
 python eval/eval_detection.py --split val                      # AP, recall-vs-range, latency
 python eval/eval_box_quality.py --split val                   # detector box vs label box, per object
+python eval/eval_road_profile.py --split val                  # real road vs the assumed flat plane
 python eval/eval_range.py    --split val --bins 10,20,30,50   # → error-vs-range curve
 python eval/eval_tracking.py --split val --tracker iou|sort
 python eval/eval_ttc.py      --split val
@@ -173,8 +175,10 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - **THE HEADLINE (val, N=6122 detections).** Monocular range MAPE by bin, contact-point **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %**. **Credible envelope: 10–30 m at ≤15% MAPE. No bin reaches 10%.** Graded by the Phase 1 ruler on the detector's own boxes — no label matching.
 - **The curve is U-shaped and that is the finding.** Error is *worst in the near field* (22.7% inside 10 m), not at range. A collision-warning system least accurate where collision is most imminent is uncomfortable and is reported, not smoothed.
 - **Partial cause: detector box height bias ([D-018](docs/decisions.md), corrected 09-09).** Measured per object against its own label box (5254 pairs): **−4.5% overall, −7.1% inside 10 m**, bottom edge 4.8 px high near. A **bias, not jitter** — the Phase 5 KF will not touch it. *An earlier −12% figure compared implied heights to a class mean and overstated it 2.6×.*
-- **⚠ OPEN, now sharply posed ([D-019](docs/decisions.md)).** The **size-prior** bias IS fully explained by the box shortfall (predicted +0.99 m vs observed +1.01 m — independent confirmation of D-018). The **contact-point** bias is **not**: the bottom-edge offset needed to explain it flips sign with range (−20.7 px near, **+1.5/+2.2 px** far) while the measured offset never does. A **range-dependent term** is acting that is not the detector box. Top suspect: **road non-flatness** — the plane is fitted from returns 5–30 m ahead and applied to objects at 40 m+. Cheap test: fit near vs far points separately.
-- **Overhang hypothesis refuted (09-09).** Predicted vehicle +0.8 m / VRU 0; measured vehicle **−0.03 m** / VRU **+0.38 m**. Wrong groups, wrong shape — vehicle bias slides monotonically +1.91 → −9.38 m, and a constant offset cannot change sign.
+- **FAR-RANGE CAUSE FOUND ([D-020](docs/decisions.md)): road non-flatness.** The real road falls ~10 cm below the assumed 1.655 m plane by 50 m. Predicted from geometry with **no free parameters** (`h_cam/y_act − 1`), it matches observation beyond 20 m to 0.1–0.6 m: predicted −0.59 vs observed −0.50 at 20–25 m, −2.46 vs −2.12 at 40–50 m. **The flat-ground assumption is the dominant contact-point error at range** — fixing it needs a road-profile estimate from the image, a research problem, not tuning.
+- **⚠ STILL OPEN: a flat +0.7 m near-field residual** inside 13 m (+0.68/+0.78/+0.68), which the road does not explain. ~0.3 m of it is vehicle-specific, ~0.4 m common to vehicles and VRUs. Suspects, untested: effective horizon row ≠ `cy` · `shrink_p20` on very large near-field boxes · detector bottom-edge placement on close cars vs close pedestrians.
+- **Size-prior bias fully explained** by the box shortfall — predicted +0.99 m vs observed +1.01 m, independent confirmation of [D-018](docs/decisions.md) by a different route.
+- **Overhang hypothesis rejected**, and my first test of it was **confounded by pooling across a range where the bias changes sign**. Redone within range bins: the vehicle−VRU gap is +0.94/+0.27/+0.41/+0.17 near but **−0.65/−0.59/−0.88/−1.11** beyond 13 m. Overhang predicts a constant positive gap; it is neither constant nor positive throughout.
 - **Pitch: resolved, and smaller than feared ([D-016](docs/decisions.md)).** LiDAR road-plane fit gives true camera-to-road pitch mean **+0.150°**, \|p95\| **0.715°**, camera height **1.655 m**. The earlier OXTS figures (2.0–2.2°) were the wrong quantity — navigation-frame vehicle pitch includes road grade — and overstated it 2–3×. Measured error is **flat across pitch** while the geometry predicts an 8× span, so pitch is currently masked by box bias. **Correcting pitch would have bought almost nothing**, which validates characterising it.
 - **Estimator crossover at ~20 m**, in the predicted direction (contact-point near, size-prior far). Do *not* read this as confirming the pitch model — Row 3.4 shows pitch is not the operative mechanism.
 - **Verified:** 95 tests, ruff + black clean. Two errors caught by tests this session: the linearised pitch formula used as if exact (understating cost by a third at 50 m), and a config gate (`min_rows_from_bottom`) declared but never implemented.

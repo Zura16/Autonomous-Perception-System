@@ -318,6 +318,33 @@ Reporting the p99 alone (33% of budget) would hide them, which is exactly why
 hard rule 10 requires the tail. **Detection currently uses a third of the budget
 at p99; track / range / KF / decide are not yet in this sum.**
 
+### Row 3.9 — Road non-flatness: the far-range term, predicted then checked
+
+Real road height vs the assumed level plane at 1.655 m, from LiDAR
+(`eval/eval_road_profile.py`, val, 265 frames). The bias prediction
+`h_cam/y_act − 1` has **no free parameters** — nothing is fitted to the observed
+error, which is what makes this a test.
+
+| depth (m) | median road y | vs assumed | predicted bias | observed (vehicle) | residual |
+|---|---|---|---|---|---|
+| 5–8 | 1.668 | +0.013 | −0.05 | **+0.63** | **+0.68** |
+| 8–10 | 1.672 | +0.017 | −0.09 | +0.68 | +0.78 |
+| 10–13 | 1.676 | +0.021 | −0.15 | +0.53 | +0.68 |
+| 13–16 | 1.684 | +0.029 | −0.25 | −0.10 | +0.14 |
+| 16–20 | 1.682 | +0.027 | −0.30 | +0.01 | +0.31 |
+| 20–25 | 1.699 | +0.044 | −0.59 | −0.50 | **+0.08** |
+| 25–30 | 1.710 | +0.055 | −0.89 | −1.40 | −0.51 |
+| 30–40 | 1.741 | +0.086 | −1.73 | −2.26 | −0.60 |
+| 40–50 | 1.751 | +0.096 | −2.46 | −2.12 | **+0.35** |
+
+**Beyond 20 m the flat-ground assumption is the dominant error term.** The road
+drops ~10 cm below the assumed plane by 50 m, and that alone predicts the
+observed bias to within 0.1–0.6 m ([D-020](decisions.md)).
+
+**Inside 13 m it explains almost nothing** — a flat **+0.7 m** residual remains,
+of which ~0.3 m is vehicle-specific (vehicle-minus-VRU gap) and ~0.4 m is common
+to both groups and **still unexplained**.
+
 ### Row 3.8 — Attribution: which estimator's bias is explained
 
 | estimator | source | predicted | observed | verdict |

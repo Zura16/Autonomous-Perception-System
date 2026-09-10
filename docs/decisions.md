@@ -710,9 +710,18 @@ their contact point. A car has ~0.8 m. So the hypothesis predicts vehicle bias
 | vehicle | 4285 | **−0.03 m** | +0.8 m |
 | VRU | 1716 | **+0.38 m** | 0.0 m |
 
-**Both groups are wrong, and in the wrong direction relative to each other.** The
-vehicle profile is also the wrong *shape* — not a constant offset but a monotonic
-slide with range:
+**Both groups are wrong, and in the wrong direction relative to each other.**
+
+> **⚠ Method correction (same day, [D-020](#d-020)).** This pooled comparison was
+> **confounded**: vehicle bias changes *sign* with range, so a median pooled over
+> all ranges averages a near-field over-estimate against a far-field
+> under-estimate and lands near zero for reasons that have nothing to do with
+> overhang. Redone **within range bins**, overhang is still rejected — but on the
+> shape of the gap, not on the pooled median quoted here. The conclusion survived
+> a flawed test, which is luck, not method.
+
+The vehicle profile is also the wrong *shape* — not a constant offset but a
+monotonic slide with range:
 
 | range (m) | 0–6 | 6–8 | 8–10 | 10–13 | 13–16 | 16–20 | 20–25 | 25–30 | 30–40 | 40–50 | 50–80 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -773,6 +782,86 @@ tested:
 the second to be refuted by measurement. The refutations cost minutes each
 because the artefacts are saved and the groups are separable. That is the payoff
 for storing per-detection records rather than summary statistics.
+
+---
+
+## D-020 · Road non-flatness CONFIRMED as the far-range term; near field still open · 2026-09-09 · Active
+
+**Result.** The dominant far-range error in the contact-point estimator is the
+**flat-ground assumption itself** — the real road falls steadily away from the
+assumed plane. This was predicted from geometry with **no free parameters** and
+then checked, rather than fitted.
+
+**The prediction.** A contact point at depth `D` whose real ground height is
+`y_act` projects to `v = cy + f_y·y_act/D`. The estimator, assuming `y = h_cam`,
+returns `D_est = D·h_cam/y_act`, so the fractional bias is `h_cam/y_act − 1`.
+Measuring `y_act(D)` from LiDAR therefore predicts the bias outright.
+
+**Measured road profile** (val, 265 frames, `eval/eval_road_profile.py`):
+
+| depth (m) | median y | vs assumed 1.655 | predicted bias |
+|---|---|---|---|
+| 5–8 | 1.668 | +0.013 | −0.05 m |
+| 10–13 | 1.676 | +0.021 | −0.15 m |
+| 20–25 | 1.699 | +0.044 | −0.59 m |
+| 30–40 | 1.741 | +0.086 | −1.73 m |
+| 40–50 | 1.751 | +0.096 | −2.46 m |
+
+The road drops ~10 cm below the assumed plane over 50 m — a crest, which is what
+crowned roads and ordinary terrain produce.
+
+**Prediction vs observation** (vehicles, contact-point):
+
+| depth (m) | N | predicted | observed | residual |
+|---|---|---|---|---|
+| 5–8 | 286 | −0.05 | **+0.63** | **+0.68** |
+| 8–10 | 212 | −0.09 | **+0.68** | **+0.78** |
+| 10–13 | 392 | −0.15 | **+0.53** | **+0.68** |
+| 13–16 | 350 | −0.25 | −0.10 | +0.14 |
+| 16–20 | 578 | −0.30 | +0.01 | +0.31 |
+| 20–25 | 711 | −0.58 | −0.50 | **+0.08** |
+| 25–30 | 566 | −0.88 | −1.40 | −0.51 |
+| 30–40 | 633 | −1.67 | −2.26 | −0.60 |
+| 40–50 | 296 | −2.47 | −2.12 | **+0.35** |
+
+**Beyond 20 m the road profile accounts for most of the bias** — residuals of
++0.08 and +0.35 m at 20–25 and 40–50 m against observed biases of −0.50 and
+−2.12 m. This closes the largest open question from [D-019](#d-019) and converts
+"ground-plane non-flatness — unquantified" in the error budget into a measured
+term.
+
+### What remains: a flat ~+0.7 m near-field residual
+
+Inside 13 m the residual is **+0.68 / +0.78 / +0.68 m** — remarkably constant,
+and *not* explained by the road, which predicts almost nothing there.
+
+Redoing the overhang test **within range bins** (the pooled version in D-019 was
+confounded) gives the vehicle-minus-VRU gap:
+
+| depth (m) | 0–6 | 6–8 | 8–10 | 10–13 | 13–16 | 16–20 | 20–25 | 25–30 |
+|---|---|---|---|---|---|---|---|---|
+| veh − VRU | +0.94 | +0.27 | +0.41 | +0.17 | −0.65 | −0.59 | −0.88 | −1.11 |
+
+Overhang predicts a **constant positive** gap at every range. The gap is positive
+near, **negative beyond 13 m**, and not constant anywhere — so overhang remains
+rejected, now for a defensible reason. It does say a **vehicle-specific component
+of roughly +0.3 m** exists in the near field, leaving **~+0.4 m common to both
+groups** still unexplained.
+
+**Remaining suspects for the near-field residual**, none tested:
+
+- the effective horizon row differing from `cy` (constant, so it would have to be
+  offset by something else at range);
+- ground-truth behaviour of `shrink_p20` on very large near-field boxes, where
+  the shrunken window covers a big, curved bumper;
+- something vehicle-specific in how the detector places the bottom edge on close
+  cars (shadow, wheel arch) as against close pedestrians.
+
+**The methodological point, third instance.** D-016 compared against the wrong
+pitch quantity; D-018 compared against a class mean; D-019 pooled across a range
+where the sign flips. All three were **errors of comparison, not computation**,
+and all three initially made a finding look cleaner than it was. The standing
+check is now: *before believing a summary statistic, ask what it is pooled over.*
 
 ---
 
