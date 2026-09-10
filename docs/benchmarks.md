@@ -318,6 +318,23 @@ Reporting the p99 alone (33% of budget) would hide them, which is exactly why
 hard rule 10 requires the tail. **Detection currently uses a third of the budget
 at p99; track / range / KF / decide are not yet in this sum.**
 
+### Row 3.8 — Attribution: which estimator's bias is explained
+
+| estimator | source | predicted | observed | verdict |
+|---|---|---|---|---|
+| size-prior (vehicle) | −4.5% box height | +0.99 m | **+1.01 m** | **explained** |
+| size-prior (VRU) | −4.9% box height | +0.75 m | +1.41 m | partly |
+| contact-point | box bottom edge | sign flips vs measured | — | **NOT explained** |
+
+Contact-point: the bottom-edge offset needed to explain the observed bias is
+−20.7 px at 0–10 m and **+1.5 / +2.2 px** at 20–50 m, against a measured offset
+of −4.8 / −1.2 / −0.9 px that never changes sign. A range-dependent term is
+acting that is not the detector box ([D-019](decisions.md)).
+
+**Overhang hypothesis refuted.** Vehicles (≈0.8 m overhang) show median bias
+**−0.03 m**; VRUs (no overhang) show **+0.38 m** — both groups wrong, and
+opposite to the prediction.
+
 ### Row 2.7 — Detector box geometry vs the label's own box
 
 Each detector box against **the label box for the same object in the same

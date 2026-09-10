@@ -693,6 +693,89 @@ compared against before believing it.**
 
 ---
 
+## D-019 · Overhang hypothesis REFUTED; the contact-point error is not the detector box · 2026-09-09 · Active
+
+**Hypothesis tested and rejected.** The near-field range bias was proposed to be
+a *definitional* artefact: `range_m` is the near face (the bumper, [D-003](#d-003))
+while the contact-point estimator measures where the tyres meet the road, set
+back by the vehicle's overhang (~0.8 m). A constant offset is a large percentage
+up close and small far away, which would produce the U shape by construction.
+
+**The decisive test.** A pedestrian has **no overhang** — their near face *is*
+their contact point. A car has ~0.8 m. So the hypothesis predicts vehicle bias
+≈ +0.8 m roughly constant, VRU bias ≈ 0.
+
+| group | N | median bias | predicted |
+|---|---|---|---|
+| vehicle | 4285 | **−0.03 m** | +0.8 m |
+| VRU | 1716 | **+0.38 m** | 0.0 m |
+
+**Both groups are wrong, and in the wrong direction relative to each other.** The
+vehicle profile is also the wrong *shape* — not a constant offset but a monotonic
+slide with range:
+
+| range (m) | 0–6 | 6–8 | 8–10 | 10–13 | 13–16 | 16–20 | 20–25 | 25–30 | 30–40 | 40–50 | 50–80 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| vehicle bias | +1.91 | +0.56 | +0.68 | +0.53 | −0.10 | +0.01 | −0.50 | −1.40 | −2.26 | −2.12 | −9.38 |
+
+A constant overhang cannot produce a sign change. Hypothesis dead.
+
+### What the same analysis *did* establish
+
+**1. The size-prior bias is fully explained by the box-height shortfall**, which
+independently confirms [D-018](#d-018) through a different route:
+
+| group | predicted from −4.5% shortfall | observed |
+|---|---|---|
+| vehicle | +0.99 m | **+1.01 m** |
+| VRU | +0.75 m | +1.41 m |
+
+The vehicle agreement to 2 cm is strong evidence the box-height measurement is
+right. (VRU is looser — its pooled prior spans pedestrians and cyclists.)
+
+**2. The contact-point bias is NOT driven by the box bottom edge.** Solving for
+the bottom-edge offset that *would* explain the observed bias, against the offset
+actually measured in Row 2.7:
+
+| range (m) | dv needed | dv measured |
+|---|---|---|
+| 0–10 | −20.7 px | −4.8 px |
+| 10–20 | −0.9 px | −2.0 px |
+| 20–30 | **+1.5 px** | −1.2 px |
+| 30–50 | **+2.2 px** | −0.9 px |
+
+**The required offset flips sign with range; the measured one does not.** No
+constant pixel error, no camera-height error, and no prior error can do that —
+each of those produces a single-signed bias. Something **range-dependent** is
+acting in the contact-point path that is not the detector box.
+
+### The open question, now sharply posed
+
+Not "the near-field cause is unknown" but: **what range-dependent term sits in
+`D = f·h_cam/(v_bottom − v_horizon)` besides the box?** Named suspects, none
+tested:
+
+- **Road non-flatness** — the strongest candidate. The estimator assumes one
+  plane through the camera at 1.655 m, and `aps/groundplane.py` fits that plane
+  from returns **5–30 m ahead**. An object at 40 m sits on road the fit never
+  saw. A far field that rises relative to the near-field plane pushes contact
+  points lower in the image and reads *short* — which is the observed far-range
+  sign. **Testable cheaply**: fit the plane on near points vs far points
+  separately and compare.
+- **Effective horizon row** — `v_horizon` is assumed to be `cy`. Any offset is
+  constant, so this cannot explain the sign flip alone, but it could bias the
+  whole curve.
+- **Ground-truth behaviour on detector boxes at range** — Phase 1 characterised
+  the ruler on *label* boxes. Detector boxes are 4.5% smaller and shifted, so
+  `shrink_p20` samples a different window; at 30–50 m that window is ~14 px tall.
+
+**Standing note.** This is the third hypothesis about the near-field error and
+the second to be refuted by measurement. The refutations cost minutes each
+because the artefacts are saved and the groups are separable. That is the payoff
+for storing per-detection records rather than summary statistics.
+
+---
+
 ## Open questions
 
 | Question | Blocks | Notes |
