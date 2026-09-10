@@ -279,6 +279,10 @@ is **1.400 m at 0–10 m against a true 1.595 m**, 5–8% low elsewhere. Detecto
 boxes are systematically undersized, worst near, and both estimators inherit it
 as a range over-estimate.
 
+> **⚠ Corrected 2026-09-09 — this magnitude was overstated 2.6×.** It compared
+> implied heights against a *class mean*, absorbing the class's 20.1% spread.
+> Measured per object it is −4.5% overall / −7.1% near ([D-018](decisions.md)).
+
 The error budget predicted detector box error would dominate. It does — but as a
 **bias, not jitter**, so nothing that averages over frames will remove it.
 

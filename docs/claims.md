@@ -26,7 +26,8 @@ row is a failure, not a warning.
 | C-9 | "Measured detection latency at 33% of the 103.56 ms sensor budget at p99 on an M2, and identified five host stalls exceeding the budget that the p99 concealed." | [Row 2.5](benchmarks.md) | *pending* | Detection only; other pipeline stages not yet measured. MPS, 640 px, batch 1. |
 
 | C-10 | "Produced a monocular range error-vs-range curve on 6122 detections, graded by a LiDAR ruler applied to the detector's own boxes, establishing a credible operating envelope of 10–30 m at ≤15% MAPE." | [Row 3.1–3.2](benchmarks.md) | *pending* | val. No bin reaches 10% MAPE. Measured on the ~33% of objects both detected and groundtruthable — a lower bound. |
-| C-11 | "Found the error curve is U-shaped — worst inside 10 m at 22.7% MAPE — and traced it to a systematic 12% detector box-height bias rather than to geometry." | [Row 3.1, 3.5](benchmarks.md) | *pending* | val. A bias, not jitter; temporal filtering will not remove it. |
+| C-11 | "Found the monocular error curve is U-shaped — worst inside 10 m at 22.7% MAPE, not at range." | [Row 3.1](benchmarks.md) | *pending* | val. The *cause* is only partly identified — see C-14. Do not attribute it wholly to box bias. |
+| C-14 | "Measured detector box-height bias per object against its own label (−4.5% overall, −7.1% inside 10 m), correcting an earlier figure that overstated it 2.6× by comparing against a class mean." | [Row 2.7](benchmarks.md) | *pending* | val, 5254 matched pairs. Accounts for ~80% of the mid-range range bias and only ~17% of the near-field bias. |
 | C-12 | "Measured true camera-to-road pitch by fitting the road plane to LiDAR (mean +0.150°, p95 0.715°), correcting an OXTS-derived figure that overstated it 2–3× by including road grade." | [Row 3.7](benchmarks.md) | *pending* | Drives with no hard braking, so a floor on the operational distribution. |
 | C-13 | "Showed by measurement that the flat-ground pitch assumption is not this system's bottleneck: error is flat across measured pitch where geometry predicts an 8× span." | [Row 3.4](benchmarks.md) | *pending* | True only while the box bias dominates. Pitch becomes binding once that is fixed. |
 
@@ -50,7 +51,9 @@ Kept here because the tempting overstatement is more dangerous than the gap.
 | Per-class detection mAP (Car vs Van vs Truck) | Not recoverable from a COCO-trained model; the number would measure the mapping ([D-014](decisions.md)). |
 | "Monocular range is unreliable beyond 50 m" | NOT measured. 50 m is where the *evidence* runs out, not where the estimator fails. |
 | "Accurate to X% monocular range" (single figure) | Forbidden by hard rule 2, and the curve is U-shaped — a single figure hides that the near field is worst. |
-| "Pitch does not matter for monocular range" | It does; it is currently *masked* by detector box bias ([D-017](decisions.md)). The claim is conditional, not general. |
+| "Pitch does not matter for monocular range" | It does; it is currently *masked* by other error ([D-017](decisions.md)). The claim is conditional, not general. |
+| "Detector box bias explains the U-shaped error curve" | Measured: it accounts for ~80% of the mid-range bias and only ~17% of the near-field bias. The near-field cause is **unidentified** ([D-018](decisions.md)). |
+| The superseded −12% box-bias figure | Overstated 2.6×; it absorbed the class's 20.1% height spread. |
 | Comparing AP 0.615 to a KITTI leaderboard | Zero-shot COCO model, raw-tracklet labels, class-agnostic protocol. Not the same task. |
 | Any range figure without "on the unoccluded 38%" | Coverage is part of the number. Omitting it overstates by an unknown amount. |
 | The superseded dev figures (0.13 m, 64%) | Overturned by val. Quoting them would be quoting a ten-box sample. |

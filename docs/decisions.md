@@ -602,20 +602,17 @@ conservative default, it is a silent lie about what the code does.*
 ### The larger finding this uncovered
 
 Clipping was not the main story. Computing the **implied object height**
-(`box_height_px × gt_range / f_y`, which must be range-independent and equal to
-the true height) exposed a systematic detector bias:
+(`box_height_px × gt_range / f_y`) against the pooled class mean suggested a
+large detector bias — **−12.2% at 0–10 m**.
 
-| bin (m) | implied vehicle height | vs true 1.595 m |
-|---|---|---|
-| 0–10 | **1.400 m** | **−12.2%** |
-| 10–20 | 1.497 m | −6.1% |
-| 20–30 | 1.520 m | −4.7% |
-| 30–50 | 1.467 m | −8.0% |
+**⚠ That magnitude was overstated ~2.6×. See [D-018](#d-018).** Measured
+per-object against each label's own box, the shortfall is **−4.5% overall and
+−7.1% at 0–10 m**. The −12% figure conflated the detector's box error with the
+pooled class's 20.1% height spread — an individual car is not the class mean.
 
-**Detector boxes are systematically shorter than the objects they contain**, by
-5–12%, worst in the near field. Both estimators inherit this one-for-one as a
-range over-estimate, which is precisely the positive bias in Row 3.1 and the
-cause of the error curve's U shape.
+**The direction and the mechanism stand:** detector boxes are systematically
+shorter than the objects they contain, worst in the near field, and both
+estimators inherit it as a range over-estimate.
 
 `docs/error-budget.md` predicted detector box error would dominate. It does — but
 it is a **bias, not jitter**. Jitter averages out across frames and inflates
@@ -631,6 +628,68 @@ fitted on dev and the val figure reported both ways.
 where the geometry predicts an 8× span — because box bias, at 5–12%, swamps the
 pitch term at the magnitudes actually present (|p95| 0.715°). The flat-ground
 assumption is not this system's bottleneck; the detector is.
+
+---
+
+## D-018 · The detector box-height bias was overstated 2.6× by comparing to a class mean · 2026-09-09 · Active
+
+**Correction.** [D-017](#d-017) reported a **−12.2%** detector box-height
+shortfall at 0–10 m, inferred by comparing an *implied* object height
+(`box_h × range / f_y`) against the pooled vehicle class mean of 1.595 m.
+Measured properly — each detector box against **the label box for the same
+object in the same frame**, 5254 matched pairs on val — the shortfall is:
+
+| bin (m) | det/label height | shortfall | bottom-edge offset |
+|---|---|---|---|
+| 0–10 | 0.929 | **−7.1%** | −4.8 px |
+| 10–20 | 0.955 | −4.5% | −2.0 px |
+| 20–30 | 0.976 | −2.4% | −1.2 px |
+| 30–50 | 0.959 | −4.1% | −0.9 px |
+| 50+ | 0.995 | −0.5% | −0.1 px |
+| **all** | **0.955** | **−4.5%** | −1.8 px |
+
+**Why the first figure was wrong.** Comparing an implied height to a *class mean*
+measures three things at once and attributes all of them to the detector:
+
+1. the detector's box error — the thing we wanted;
+2. the pooled class's **20.1% height spread** — a hatchback is not a van, and
+   D-014 established the estimator cannot tell them apart;
+3. selection effects — objects the detector finds are not a random sample of the
+   class.
+
+Only (1) is a detector property. The per-object comparison isolates it.
+
+**The method itself checks out.** Label box height against the pinhole prediction
+`f_y·H_3d/range` gives **1.000–1.011** across every range bin, so the amodal 3D
+annotation and the projected 2D extent agree to ~1%. The implied-height *approach*
+was sound; the *reference* was wrong.
+
+**The causal claim is now only partly supported.** D-017 asserted the box bias
+explains the error curve's U shape. Converting the measured bottom-edge offset
+into a contact-point range bias and comparing to the observed bias in Row 3.1:
+
+| bin (m) | predicted from bottom offset | measured (Row 3.1) |
+|---|---|---|
+| 0–10 | +0.18 m | **+1.05 m** |
+| 10–20 | +0.39 m | +0.48 m |
+| 20–30 | +0.59 m | +0.10 m |
+| 30–50 | +1.18 m | +0.91 m |
+
+It accounts well for the mid-range bias and **does not account for the near
+field**, where the observed bias is ~6× what the box offset predicts. So the
+near-field degradation has a further cause that is **not yet identified**. Saying
+"detector box bias explains the U shape" overstates what is measured; the honest
+statement is that it explains part of it, at mid range.
+
+**Standing lesson, and it is the second instance.** Both this and [D-016](#d-016)
+were errors of *reference*, not of arithmetic: comparing against vehicle pitch
+instead of camera-to-road pitch, and against a class mean instead of the object's
+own label. In both cases the computation was right and the thing it was compared
+to was wrong, and in both cases the error inflated a finding that made the write-up
+more interesting. **When a measurement is surprising, check what it is being
+compared against before believing it.**
+
+`eval/eval_box_quality.py` is the committed harness for this measurement.
 
 ---
 

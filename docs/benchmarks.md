@@ -318,6 +318,46 @@ Reporting the p99 alone (33% of budget) would hide them, which is exactly why
 hard rule 10 requires the tail. **Detection currently uses a third of the budget
 at p99; track / range / KF / decide are not yet in this sum.**
 
+### Row 2.7 — Detector box geometry vs the label's own box
+
+Each detector box against **the label box for the same object in the same
+frame** — 5254 matched pairs, val, conf 0.25, IoU 0.5.
+Harness: `eval/eval_box_quality.py`.
+
+**Method check first.** Label box height against the pinhole prediction
+`f_y·H_3d/range` gives **1.000 / 1.009 / 1.011 / 1.011 / 1.009** across the five
+bins. The amodal 3D annotation and the projected 2D extent agree to ~1%, so the
+implied-height *approach* is sound — it was the *reference* that was wrong.
+
+| bin (m) | N | det/label height | shortfall | bottom-edge offset |
+|---|---|---|---|---|
+| 0–10 | 1023 | 0.929 | **−7.1%** | −4.8 px |
+| 10–20 | 1643 | 0.955 | −4.5% | −2.0 px |
+| 20–30 | 1222 | 0.976 | −2.4% | −1.2 px |
+| 30–50 | 1105 | 0.959 | −4.1% | −0.9 px |
+| 50+ | 261 | 0.995 | −0.5% | −0.1 px |
+| **all** | **5254** | **0.955** | **−4.5%** | −1.8 px |
+
+Clean subset (visible, untruncated, N=3120) gives the same picture: ratio 0.956
+overall, 0.936 at 0–10 m. Occlusion barely moves it (0.956 clean vs 0.952
+occluded), and neither does group (vehicle 0.956, VRU 0.951) — this is a
+**general property of the detector**, not an artefact of hard cases.
+
+**How much of the range error does it explain?** Converting the bottom-edge
+offset into a contact-point range bias and comparing with Row 3.1:
+
+| bin (m) | predicted from box offset | measured | accounted for |
+|---|---|---|---|
+| 0–10 | +0.18 m | **+1.05 m** | **17%** |
+| 10–20 | +0.39 m | +0.48 m | 81% |
+| 20–30 | +0.59 m | +0.10 m | — |
+| 30–50 | +1.18 m | +0.91 m | 77% |
+
+**It accounts well for mid-range bias and NOT for the near field**, where the
+observed bias is ~6× what the box offset predicts. The near-field degradation
+therefore has a further, **currently unidentified** cause. The earlier claim that
+box bias explains the U shape is stronger than the evidence supports.
+
 ### Row 2.6 — Compound evidence coverage ← **what Phase 3 can actually measure**
 
 A label is usable for evaluating monocular range only if it is **both detected
@@ -446,26 +486,23 @@ something larger is masking it.
 **This retroactively validates characterising rather than correcting pitch
 ([D-016](decisions.md)): a pitch correction would have bought almost nothing.**
 
-### Row 3.5 — What actually dominates: detector box height bias
+### Row 3.5 — Detector box height bias · **CORRECTED 2026-09-09**
 
-Implied object height, `box_height_px × gt_range / f_y`, which should be
-range-independent and equal the true object height:
+> **⚠ This row originally reported −12.2% at 0–10 m**, from comparing an implied
+> object height (`box_h × range / f_y`) against the pooled class mean of 1.595 m.
+> That overstated the detector's error by ~2.6× because it also absorbed the
+> class's 20.1% height spread. Superseded by **Row 2.7**, which measures each
+> detector box against the label box for the same object. See
+> [D-018](decisions.md).
 
-| bin (m) | implied vehicle height | vs true 1.595 m |
-|---|---|---|
-| 0–10 | **1.400 m** | **−12.2%** |
-| 10–20 | 1.497 m | −6.1% |
-| 20–30 | 1.520 m | −4.7% |
-| 30–50 | 1.467 m | −8.0% |
-| 50+ | 1.737 m | +8.9% |
+**Corrected figure: −4.5% overall, −7.1% at 0–10 m.** Detector boxes are
+systematically shorter than the objects they contain, worst in the near field,
+and both estimators inherit it as a range over-estimate.
 
-**Detector boxes are systematically shorter than the objects they contain**, by
-~5–12%, worst in the near field. Both estimators inherit it as a range
-over-estimate — which is exactly the positive bias in Row 3.1 — and it is the U
-shape's cause.
-
-The error budget predicted detector box error would be the dominant term. It is —
-but it is a **bias, not jitter**, and a bias does not average away over frames.
+The error budget predicted detector box error would be the dominant term. It is a
+**bias, not jitter**, so it does not average away over frames — but see Row 2.7
+for how much of the error curve it actually accounts for, which is less than this
+row originally claimed.
 
 ### Row 3.6 — Boxes clipped at the image edge
 

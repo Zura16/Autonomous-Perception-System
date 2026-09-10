@@ -1,4 +1,4 @@
-# CLAUDE.md — Autonomous Perception System (APS)
+# AGENTS.md — Autonomous Perception System (APS)
 
 Auto-loaded every session. This file is the operative context: scope, hard rules, commands, current status. Deep detail lives in the docs — read them on demand, don't guess:
 
@@ -43,7 +43,7 @@ Ground truth: projected LiDAR range  ·  Output: HUD + top-down view (Phase 8, d
 
 ### Who writes the code
 
-**Coach mode is currently OVERRIDDEN — see [D-001](docs/decisions.md).** The author elected to have Claude implement and to review diffs instead. The charter's original terms are preserved below and resume at any stage the author asks to take over, with no renegotiation.
+**Coach mode is currently OVERRIDDEN — see [D-001](docs/decisions.md).** The author elected to have Codex implement and to review diffs instead. The charter's original terms are preserved below and resume at any stage the author asks to take over, with no renegotiation.
 
 > **Coach mode (suspended).** Set up, don't solve. Hint ladder, one level at a time, only on request: (1) concept + where to look → (2) shape (pseudocode / signature) → (3) targeted snippet → (4) full solution, **only on explicit request**, logged as "solved for me — revisit." Debugging is a rep: ask for the observation and the hypothesis first. In this stack the bug is almost always a coordinate frame, a units mismatch, or an unfiltered derivative — rarely the model.
 
@@ -61,7 +61,7 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 2. **Never report a single accuracy figure for monocular range.** Report **error vs. range**, binned (0–10 / 10–20 / 20–30 / 30–50 / 50+ m), with MAE, MAPE, and spread. A lone "±2 m" headline conceals that pinhole sensitivity is worst at distance — which is exactly what a good interviewer is probing for.
 3. **Never differentiate distance to obtain velocity.** Use the scale relation `Ḋ = −D·ḣ/h` with a Kalman filter over the image-plane state, so range, closing speed, and TTC derive from one consistent state and can never contradict each other.
 4. **Phantom closing speed is a bug, not noise.** A parked vehicle must produce ≈0 closing speed. A deadband on the closing rate is mandatory, and its threshold is a logged decision with a measured false-trigger rate.
-5. **State the pitch assumption everywhere it bites.** Flat-ground contact-point geometry assumes zero camera pitch. **RESOLVED by measurement ([D-016](docs/decisions.md)):** true camera-to-road pitch, from a LiDAR road-plane fit, is mean +0.150° with \|p95\| **0.715°** — the earlier OXTS figures (2.0–2.2°) were the wrong quantity and overstated it 2–3×. Decision: **characterise, do not correct**, with a measured sensitivity curve (Row 3.4). Measured error turns out **flat across pitch**, masked by larger error — partly detector box bias, and partly a near-field cause that is still **unidentified** ([D-017](docs/decisions.md), [D-018](docs/decisions.md)). Pitch becomes the binding constraint only once those are resolved.
+5. **State the pitch assumption everywhere it bites.** Flat-ground contact-point geometry assumes zero camera pitch. **RESOLVED by measurement ([D-016](docs/decisions.md)):** true camera-to-road pitch, from a LiDAR road-plane fit, is mean +0.150° with \|p95\| **0.715°** — the earlier OXTS figures (2.0–2.2°) were the wrong quantity and overstated it 2–3×. Decision: **characterise, do not correct**, with a measured sensitivity curve (Row 3.4). Measured error turns out **flat across pitch**, because detector box bias masks it ([D-017](docs/decisions.md)). Pitch becomes the binding constraint only once the box bias is fixed.
 6. **Object-size priors carry their variance.** A prior without a variance is a guess wearing a lab coat.
 7. **The decision layer is evaluated as a detector, never demoed.** FCW/AEB-request logic reports true-positive rate **and false positives per hour of video**, at a named TTC threshold. FP rate is the number that matters: a phantom brake at highway speed is itself the crash.
 8. **Trackers are measured, not eyeballed.** Report MOTA / IDF1 / ID-switches, and land a SORT comparison. "The boxes look stable" is not a result.
@@ -107,8 +107,7 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | **Range MAPE by bin** — size-prior | **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %** |
 | **Credible operating envelope** | **10–30 m at ≤15% MAPE.** No bin reaches 10%; best is 10.3% at 10–20 m. Excludes the near field |
 | Camera geometry (LiDAR-measured) | height **1.655 m** (std 0.027) · camera-to-road pitch mean +0.150°, \|p95\| **0.715°** |
-| Detector box height bias (val, 5254 pairs) | **−4.5% overall · −7.1% at 0–10 m** · bottom edge −4.8 px near. A bias, not jitter ([D-018](docs/decisions.md)) |
-| Near-field error cause | **UNIDENTIFIED.** Box bias explains ~17% of the 0–10 m bias, ~80% at mid range |
+| Dominant error source | **detector box height bias**, −12% at 0–10 m, −5..8% elsewhere. A bias, not jitter ([D-017](docs/decisions.md)) |
 | Closing-speed error vs GT | TBD |
 | TTC error where it matters (TTC < 3 s) | TBD |
 | Tracking MOTA / IDF1 / ID-switches — IoU vs SORT | TBD |
@@ -133,7 +132,6 @@ python tools/render_frame.py --drive 2011_09_26_drive_0013 --frame 20 \
 
 # ── Evaluate (always before performance or visual work)
 python eval/eval_detection.py --split val                      # AP, recall-vs-range, latency
-python eval/eval_box_quality.py --split val                   # detector box vs label box, per object
 python eval/eval_range.py    --split val --bins 10,20,30,50   # → error-vs-range curve
 python eval/eval_tracking.py --split val --tracker iou|sort
 python eval/eval_ttc.py      --split val
@@ -172,8 +170,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - **Phase:** **Phase 3 COMPLETE** (2026-09-02). Phases 0–2 ✅. **Next: Phase 4 — tracking (IoU baseline → SORT), MOTA/IDF1/ID-switches.**
 - **THE HEADLINE (val, N=6122 detections).** Monocular range MAPE by bin, contact-point **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %**. **Credible envelope: 10–30 m at ≤15% MAPE. No bin reaches 10%.** Graded by the Phase 1 ruler on the detector's own boxes — no label matching.
 - **The curve is U-shaped and that is the finding.** Error is *worst in the near field* (22.7% inside 10 m), not at range. A collision-warning system least accurate where collision is most imminent is uncomfortable and is reported, not smoothed.
-- **Partial cause: detector box height bias ([D-018](docs/decisions.md), corrected 09-09).** Measured per object against its own label box (5254 pairs): **−4.5% overall, −7.1% inside 10 m**, bottom edge 4.8 px high near. A **bias, not jitter** — the Phase 5 KF will not touch it. *An earlier −12% figure compared implied heights to a class mean and overstated it 2.6×.*
-- **⚠ OPEN — the near-field cause is unidentified.** Box bias accounts for ~80% of the mid-range range bias but only **~17% of the near-field bias** (+0.18 m predicted vs +1.05 m measured at 0–10 m). "Box bias explains the U shape" is **not** supported. This is currently the most important open question in the project.
+- **Cause: detector box height bias ([D-017](docs/decisions.md)).** Implied object height is **1.400 m at 0–10 m against a true 1.595 m (−12%)**, 5–8% low elsewhere. Both estimators inherit it as a range over-estimate. It is a **bias, not jitter** — temporal filtering and the Phase 5 KF will not touch it.
 - **Pitch: resolved, and smaller than feared ([D-016](docs/decisions.md)).** LiDAR road-plane fit gives true camera-to-road pitch mean **+0.150°**, \|p95\| **0.715°**, camera height **1.655 m**. The earlier OXTS figures (2.0–2.2°) were the wrong quantity — navigation-frame vehicle pitch includes road grade — and overstated it 2–3×. Measured error is **flat across pitch** while the geometry predicts an 8× span, so pitch is currently masked by box bias. **Correcting pitch would have bought almost nothing**, which validates characterising it.
 - **Estimator crossover at ~20 m**, in the predicted direction (contact-point near, size-prior far). Do *not* read this as confirming the pitch model — Row 3.4 shows pitch is not the operative mechanism.
 - **Verified:** 95 tests, ruff + black clean. Two errors caught by tests this session: the linearised pitch formula used as if exact (understating cost by a third at 50 m), and a config gate (`min_rows_from_bottom`) declared but never implemented.

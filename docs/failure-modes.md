@@ -128,18 +128,26 @@ than any other bin, including 50+ m. The error curve is U-shaped, not monotonic.
 collision is most imminent. This is the single most uncomfortable result in the
 project and is reported in the README rather than buried.
 
-**Mechanism:** FM-10, not geometry.
+**Mechanism:** partly FM-10 (~17% of the near-field bias). **The rest is unexplained** — the most important open question in the project ([D-018](decisions.md)).
 
 ### FM-10 · Detector boxes are systematically undersized · **CONFIRMED**
 
 **Condition:** all ranges; worst inside 10 m.
 
-**Behaviour:** implied object height (`box_h × range / f_y`) is 1.400 m at
-0–10 m against a true 1.595 m — **−12%** — and 5–8% low elsewhere. Both
-estimators inherit it as a range over-estimate.
+**Behaviour:** measured per object against its own label box (5254 pairs), the
+detector box is **−4.5% short overall and −7.1% inside 10 m**, with the bottom
+edge sitting **4.8 px high** in the near field. Both estimators inherit it as a
+range over-estimate.
+
+*(An earlier figure of −12% compared implied height to a class mean and
+overstated this 2.6× — [D-018](decisions.md).)*
 
 **Why it is worse than noise:** it is a **bias**. Temporal filtering and the
 Phase 5 Kalman filter reduce jitter and will not touch this.
+
+**But it does not explain FM-9.** Converted to a range bias it accounts for ~80%
+of the mid-range error and only **~17% of the near-field error**. The near-field
+cause is still unidentified.
 
 ### FM-11 · Boxes clipped at the image edge · **CONFIRMED**
 

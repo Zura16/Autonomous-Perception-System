@@ -154,11 +154,19 @@ field*, not at range — a collision-warning system least accurate where a
 collision is most imminent. The cause is not geometry:
 
 **Detector boxes are systematically shorter than the objects they contain.**
-Implied object height (`box_height × range / f`, which must be range-independent)
-is **1.400 m at 0–10 m against a true 1.595 m — a 12% shortfall**, and 5–8%
-elsewhere. Both estimators inherit it one-for-one as a range over-estimate. It is
-a **bias, not jitter**, so temporal filtering and the Phase 5 Kalman filter will
-not remove it.
+Measured per object against its own label box (5254 matched pairs): **−4.5%
+overall, −7.1% inside 10 m**, with the box's bottom edge sitting 4.8 px high in
+the near field. Both estimators inherit it as a range over-estimate, and it is a
+**bias, not jitter** — temporal filtering and the Phase 5 Kalman filter will not
+remove it.
+
+**But it does not fully explain the U shape, and an earlier version of this
+README said it did.** Converted to a range bias it accounts for ~80% of the
+mid-range error and only **~17% of the near-field error**. The near-field cause
+remains unidentified — currently the most important open question in the project.
+The first estimate of this bias (−12%) compared implied heights against a *class
+mean*, which absorbed the class's 20% height spread and overstated the detector's
+error by 2.6× ([D-018](docs/decisions.md)).
 
 **Pitch turned out smaller than feared, and currently invisible.** Fitting the
 road plane to LiDAR gives the *right* quantity — camera-to-road pitch, mean
@@ -169,10 +177,16 @@ predicts an 8× span: pitch is real but masked by the box bias. Correcting it
 would have bought almost nothing, which is why the decision was to *characterise*
 the flat-ground assumption rather than correct it.
 
-**Two errors caught by unit tests this session**, both of which flattered the
-method: a linearised pitch formula used as if exact (understating the cost by a
-third at 50 m), and a config gate for image-clipped boxes that was declared and
-never implemented (those 4.2% of detections carry 46.4% MAPE against 13.6%).
+**Three corrections, all of which had flattered the method.** A linearised pitch
+formula used as if exact (understating the cost by a third at 50 m); a config
+gate for image-clipped boxes declared and never implemented (those 4.2% of
+detections carry 46.4% MAPE against 13.6%); and a box-bias figure inflated 2.6×
+by comparing against a class mean instead of each object's own label.
+
+Two of the three were errors of **reference**, not arithmetic — the computation
+was right and the thing it was compared against was wrong. Both inflated a
+finding in the direction that made the write-up more interesting, which is
+exactly why they are logged.
 
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
@@ -209,6 +223,7 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `configs/dataset.yaml` | The split. Changing it invalidates every benchmark row |
 | `docs/` | Benchmarks, decisions, error budget, glossary, history |
 | `tests/` | Closed-form geometry and AP cases; 95 tests |
+| `eval/eval_box_quality.py` | Detector box vs label box, per object — the D-018 harness |
 | `legacy/` | The v1 demo, archived. **Not a baseline** — see below |
 
 ## About `legacy/`
