@@ -23,7 +23,7 @@ to be able to say exactly why, with numbers.
 
 ## Status
 
-**Phases 0–3 of 9 complete**, including the headline artifact: the monocular
+**Phases 0–4 of 9 complete**, including the headline artifact: the monocular
 error-vs-range curve, graded by a LiDAR ruler whose own error was characterised
 first. That ordering is deliberate — an estimator with no ground truth is a
 decoration.
@@ -34,7 +34,7 @@ decoration.
 | 1 | **LiDAR ground-truth harness** | ✅ |
 | 2 | **Detection baseline** (AP + recall-vs-range + latency) | ✅ |
 | 3 | **Monocular range + error-vs-range curve** ← headline | ✅ |
-| 4 | Tracking: IoU → SORT, MOTA/IDF1/ID-switches | — |
+| 4 | **Tracking**: IoU → SORT, MOTA/IDF1/ID-switches | ✅ |
 | 5 | Closing speed + TTC (scale-rate + KF) | — |
 | 6 | Lane detection + departure metric | — |
 | 7 | FCW decision layer: TPR **and FP/hour** | — |
@@ -188,6 +188,41 @@ was right and the thing it was compared against was wrong. Both inflated a
 finding in the direction that made the write-up more interesting, which is
 exactly why they are logged.
 
+## What Phase 4 established
+
+IoU baseline vs SORT on **identical detections**, val, 1450 frames:
+
+| tracker | MOTA | MOTP | IDF1 | ID switches |
+|---|---|---|---|---|
+| `iou` baseline | 0.268 | 0.768 | 0.488 | 507 |
+| `sort` (canonical) | 0.270 | **0.735** | 0.515 | 354 |
+| **`sort_det`** ← shipped | **0.284** | **0.769** | **0.522** | 358 |
+
+**Canonical SORT bundles two changes, and only one of them earns its keep.**
+Ablating them separately:
+
+- **association** (predict-then-assign, optimally rather than greedily) buys
+  **−29% ID switches** and +0.035 IDF1;
+- **Kalman smoothing of the output** costs **MOTP 0.769 → 0.735** and gains
+  nothing in identity.
+
+So the shipped tracker keeps SORT's prediction and discards its smoothing. At
+9.657 Hz the raw detection is better localised than the filter smoothing it, and
+the filter lags whenever an object accelerates — a filter is only worth its
+weight when you can show the measurement is noisier than the model, and here it
+isn't. That distinction is invisible without the third configuration.
+
+**MOTA here measures the detector, not the tracker.** ~3450 misses and ~2430
+false positives out of 8705 in every configuration, matching Phase 2's 60%
+recall. No association strategy recovers an object that was never detected —
+which is why hard rule 8 demands MOTA *and* IDF1 *and* ID-switches rather than
+one number.
+
+**ID switches concentrate at 10–20 m** — 259 of 507 over just 64 objects, right
+inside the 10–30 m operating envelope. That matters downstream: Phase 5 reads a
+per-object box-height history, and a switch splices two objects' histories
+together and manufactures a closing speed out of the seam.
+
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
 
@@ -215,6 +250,8 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `aps/groundtruth.py` | The ruler: LiDAR-in-box range, validity tiers, spread gate |
 | `aps/detect.py` | YOLOv8 wrapper + the COCO→APS class mapping |
 | `aps/geometry.py` | Monocular range: contact-point and size-prior estimators |
+| `aps/tracking.py` | IoU baseline, SORT, and the box Kalman filter |
+| `aps/motmetrics.py` | CLEAR MOT and IDF1, self-implemented |
 | `aps/groundplane.py` | LiDAR road-plane fit — camera height and pitch, GT only |
 | `aps/matching.py` | IoU, greedy association, ignore regions, average precision |
 | `aps/viz.py` | Debug rendering (not the HUD — that is Phase 8) |
@@ -222,7 +259,7 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `eval/` | Evaluation harnesses (detection; range/tracking/TTC to come) |
 | `configs/dataset.yaml` | The split. Changing it invalidates every benchmark row |
 | `docs/` | Benchmarks, decisions, error budget, glossary, history |
-| `tests/` | Closed-form geometry and AP cases; 95 tests |
+| `tests/` | Closed-form geometry, AP and MOT cases; 127 tests |
 | `eval/eval_box_quality.py` | Detector box vs label box, per object — the D-018 harness |
 | `legacy/` | The v1 demo, archived. **Not a baseline** — see below |
 

@@ -297,3 +297,96 @@ binding constraint only once the box bias is addressed.
 
 **Next:** Phase 4 — tracking. IoU baseline then SORT, with MOTA / IDF1 /
 ID-switches on identical data.
+
+---
+
+## 2026-09-09 — corrections, the road profile, and Phase 4
+
+Resumed after a week. Session began by re-checking a Phase 3 claim and ended
+three corrections and one phase later.
+
+### Correction 1 — the detector box bias was overstated 2.6×
+
+Phase 3 blamed the range error on detector boxes being ~12% short, measured by
+comparing an *implied* object height against the **pooled class mean**. That
+conflates the detector's error with the class's 20.1% height spread. Measured per
+object against its own label box (5254 pairs): **−4.5% overall, −7.1% inside
+10 m** ([D-018](decisions.md)). The method itself checked out — label box vs
+pinhole prediction is 1.000–1.011 — so the approach was sound and the *reference*
+was wrong. `claims.md` C-11 had shipped the wrong figure and was rewritten.
+
+The weaker consequence mattered more than the magnitude: box bias accounts for
+~80% of the mid-range bias but only **~17% of the near-field bias**, so "box bias
+explains the U shape" was never supported.
+
+### Correction 2 — the overhang hypothesis, and a confounded test
+
+Proposed that the near-field bias was definitional: `range_m` is the bumper while
+the contact point is the tyre patch, ~0.8 m back. The decisive test is that
+pedestrians have no overhang. Pooled medians gave vehicle **−0.03 m** and VRU
+**+0.38 m** — wrong groups, wrong direction ([D-019](decisions.md)).
+
+**That pooled test was itself confounded**: vehicle bias changes *sign* with
+range, so pooling averages a near over-estimate against a far under-estimate.
+Redone within range bins, overhang stays rejected — the veh−VRU gap is +0.94 to
++0.17 near but −0.65 to −1.11 beyond 13 m, neither constant nor positive
+throughout. The conclusion survived a flawed test, which is luck, not method.
+
+### The far-range cause: road non-flatness
+
+Predicted with **no free parameters** — a contact point at depth `D` on ground at
+height `y_act` gives `D_est = D·h_cam/y_act` — then checked. The road falls ~10 cm
+below the assumed 1.655 m plane by 50 m, and that alone predicts the observed
+bias beyond 20 m to 0.1–0.6 m ([D-020](decisions.md)):
+
+| depth | predicted | observed |
+|---|---|---|
+| 20–25 m | −0.59 m | −0.50 m |
+| 30–40 m | −1.73 m | −2.26 m |
+| 40–50 m | −2.46 m | −2.12 m |
+
+**The flat-ground assumption is the dominant contact-point error at range**, and
+"ground-plane non-flatness — unquantified" in the error budget became a measured
+term. Inside 13 m it explains almost nothing; a flat **+0.7 m** residual remains
+and is still open.
+
+Three errors of *comparison* rather than computation now (wrong pitch quantity,
+class mean, pooled sign change). Standing check added: **before believing a
+summary statistic, ask what it is pooled over.**
+
+### Phase 4 — tracking
+
+IoU baseline, canonical SORT, and SORT-with-raw-output, all fed **identical
+detections**. Val, 1450 frames:
+
+| tracker | MOTA | MOTP | IDF1 | ID sw |
+|---|---|---|---|---|
+| `iou` | 0.268 | 0.768 | 0.488 | 507 |
+| `sort` | 0.270 | 0.735 | 0.515 | 354 |
+| `sort_det` | **0.284** | **0.769** | **0.522** | 358 |
+
+The third row is the point. Canonical SORT bundles association and output
+smoothing; separated, **association buys −29% ID switches** while **smoothing
+costs MOTP 0.769 → 0.735** for nothing. Shipped configuration keeps the
+prediction and discards the smoothing ([D-021](decisions.md)).
+
+MOTA barely moves between trackers because ~3450 of 8705 objects are never
+detected — MOTA is measuring Phase 2's 60% recall, not the association. ID
+switches concentrate at **10–20 m** (259 of 507 over 64 objects), inside the
+operating envelope, which matters because Phase 5 reads per-object box-height
+histories.
+
+**A test premise that was wrong taught something real:** a newborn track has zero
+velocity, so an object moving further than its own width per frame never
+associates once and SORT's filter never bootstraps. SORT cannot rescue what it
+never caught. Locked in as a test.
+
+**Dev pointed the wrong way for the third time** — a 60-frame dev run had `iou`
+ahead of `sort` on every metric. Dev is for wiring, never conclusions.
+
+**Landed:** 127 tests, ruff + black clean. `aps/tracking.py`, `aps/motmetrics.py`,
+`eval/eval_tracking.py`, `eval/eval_box_quality.py`, `eval/eval_road_profile.py`.
+
+**Next:** Phase 5 — closing speed and TTC. Scale-rate estimator with a KF over
+the image-plane state, deadband, validated on synthetic constant-velocity
+sequences before real data.

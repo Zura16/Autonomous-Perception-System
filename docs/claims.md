@@ -31,6 +31,10 @@ row is a failure, not a warning.
 | C-12 | "Measured true camera-to-road pitch by fitting the road plane to LiDAR (mean +0.150°, p95 0.715°), correcting an OXTS-derived figure that overstated it 2–3× by including road grade." | [Row 3.7](benchmarks.md) | *pending* | Drives with no hard braking, so a floor on the operational distribution. |
 | C-13 | "Showed by measurement that the flat-ground pitch assumption is not this system's bottleneck: error is flat across measured pitch where geometry predicts an 8× span." | [Row 3.4](benchmarks.md) | *pending* | True only while the box bias dominates. Pitch becomes binding once that is fixed. |
 
+| C-15 | "Measured that road non-flatness is the dominant far-range error in monocular contact-point ranging, predicting the bias from LiDAR road geometry with no free parameters and matching observation to 0.1–0.6 m beyond 20 m." | [Row 3.9](benchmarks.md) | *pending* | val. Inside 13 m it explains almost nothing; a +0.7 m residual is unexplained. |
+| C-16 | "Ablated SORT against an IoU baseline on identical detections: association buys 29% fewer ID switches, while the canonical Kalman-smoothed output costs MOTP and was discarded." | [Row 4.1–4.2](benchmarks.md) | *pending* | val, self-implemented metrics, raw-tracklet labels. NOT leaderboard-comparable. |
+| C-17 | "Showed MOTA on this data is detection-bound rather than association-bound — ~3450 of 8705 objects are never detected in any tracker configuration." | [Row 4.4](benchmarks.md) | *pending* | val. Consistent with the measured 60% detection recall. |
+
 Commit hashes are filled in by `/claim-check` once the measurement and the claim
 are in the same committed state.
 
@@ -46,7 +50,8 @@ Kept here because the tempting overstatement is more dangerous than the gap.
 | "Autonomous emergency braking" | The system emits a *request*. Nothing is actuated. |
 | "Real-time" | No latency budget has been named or measured yet. |
 | "Accurate to ±X m" (single figure) | Forbidden by hard rule 2 — error must be binned by range. |
-| Any tracking number "vs KITTI leaderboard" | Raw tracklets, not the official tracking split ([D-004](decisions.md)). |
+| Any tracking number "vs KITTI leaderboard" | Raw tracklets AND self-implemented metrics ([D-004](decisions.md), [D-021](decisions.md)). Two independent reasons. |
+| "Implemented SORT" without the ablation | The shipped tracker deliberately discards SORT's output smoothing; saying "SORT" alone misstates what was built and drops the finding. |
 | Anything about TTC or FCW | Not built. Phases 5–7. |
 | Per-class detection mAP (Car vs Van vs Truck) | Not recoverable from a COCO-trained model; the number would measure the mapping ([D-014](decisions.md)). |
 | "Monocular range is unreliable beyond 50 m" | NOT measured. 50 m is where the *evidence* runs out, not where the estimator fails. |

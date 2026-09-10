@@ -581,6 +581,95 @@ so this is a floor on the operational distribution.
 
 ---
 
+## Phase 4 — Tracking: IoU baseline vs SORT
+
+**Split:** val, 1450 frames, 8705 labelled boxes, 191 ground-truth objects.
+Detector runs **once per frame** and all three trackers consume identical
+detections (YOLOv8n, conf 0.25), so only the association strategy varies.
+Association IoU 0.3, `max_age` 3, metric matching IoU 0.5.
+Harness: `eval/eval_tracking.py`.
+
+**Two caveats on every number below.** Labels are KITTI **raw tracklets**, not
+the official tracking benchmark ([D-004](decisions.md)); metrics are
+**self-implemented** and validated on hand-computed cases, not the official
+devkit ([D-021](decisions.md)). These figures are valid for the comparison made
+here and are **not comparable to any published leaderboard**.
+
+### Row 4.1 — Headline (hard rule 8)
+
+| tracker | MOTA | MOTP | IDF1 | ID sw | Frag | FP | FN | hyp IDs |
+|---|---|---|---|---|---|---|---|---|
+| `iou` baseline | 0.268 | 0.768 | 0.488 | 507 | 365 | 2422 | 3440 | 1078 |
+| `sort` (canonical) | 0.270 | **0.735** | 0.515 | **354** | 329 | 2493 | 3512 | 1028 |
+| **`sort_det`** ← best | **0.284** | **0.769** | **0.522** | 358 | 364 | 2430 | 3448 | 1028 |
+
+`sort_det` is SORT's association with the **raw associated detection** emitted
+instead of the Kalman state. The three rows separate two changes that canonical
+SORT bundles together.
+
+### Row 4.2 — The ablation: association vs smoothing
+
+| comparison | isolates | MOTA | MOTP | IDF1 | ID switches |
+|---|---|---|---|---|---|
+| `sort_det` − `iou` | **association** | +0.015 | +0.001 | **+0.035** | **−149 (−29%)** |
+| `sort` − `sort_det` | **smoothing** | −0.014 | **−0.033** | −0.007 | −4 |
+
+**Association is worth having: 29% fewer ID switches.** Predicting where a track
+should be, and assigning optimally rather than greedily, does what it claims.
+
+**Kalman smoothing of the OUTPUT is not.** It costs MOTP 0.769 → 0.735 and MOTA
+0.284 → 0.270, and buys essentially nothing in identity. At 9.657 Hz with this
+detector, the raw detection is better localised than the filtered estimate that
+smooths it — the filter's generic process and measurement noise are not tuned to
+this detector's actual error, and it lags whenever an object accelerates.
+
+**Canonical SORT is therefore not the best configuration on this data.** Keep the
+prediction (for association) and discard the smoothing (for output). That
+distinction is invisible unless the two are ablated separately, which is why the
+third row exists ([D-021](decisions.md)).
+
+### Row 4.3 — ID switches by range
+
+Per ground-truth object, binned by its median range. Phase 5 reads a per-object
+box-height history, so a switch splices two objects' histories together and
+manufactures a closing speed from the seam.
+
+| bin (m) | GT objects | `iou` | `sort` | `sort_det` |
+|---|---|---|---|---|
+| 0–10 | 21 | 28 | **20** | **20** |
+| 10–20 | 64 | 259 | **143** | 148 |
+| 20–30 | 42 | 85 | **65** | **65** |
+| 30–50 | 58 | 125 | **114** | **114** |
+| 50+ | 6 | **10** | 12 | 11 |
+| **all** | **191** | **507** | **354** | **358** |
+
+**Switches concentrate at 10–20 m** — 259 of 507 for the baseline, over just 64
+objects (4 per object). That is the crowded mid-range where objects overlap and
+occlude each other, and it is squarely inside the 10–30 m operating envelope
+Phase 3 established. SORT's association removes 43% of them there.
+
+At 50+ m SORT is marginally *worse* (10 → 11–12), on 6 objects — too few to
+mean anything, and reported rather than dropped.
+
+### Row 4.4 — MOTA is detection-bound, not association-bound
+
+Of 8705 ground-truth boxes, roughly **3450 are missed and 2430 are false
+positives** in every configuration. Those two terms dominate MOTA and barely move
+between trackers, which is exactly consistent with Phase 2's 60% detection recall
+(Row 2.2). No association strategy recovers an object the detector never found.
+
+**Consequence:** the ~0.28 MOTA here is a statement about the *detector*, and
+IDF1 and ID-switch counts are where the tracker is actually being measured.
+
+### Superseded — dev-split figures
+
+A 60-frame dev run showed the **opposite** conclusion: `iou` ahead of `sort` on
+every metric (MOTA 0.603 vs 0.523, IDF1 0.756 vs 0.583). One drive, 151 GT boxes,
+five objects. Val reversed it. Third time in this project a small sample has
+pointed the wrong way — see also the 50+ m ruler bin ([D-013](decisions.md)).
+
+---
+
 ## Pending — nothing measured yet
 
 These rows are deliberately empty. A value here that is not a measurement is the
@@ -588,7 +677,6 @@ failure mode this file exists to prevent.
 
 | Row | Blocks on |
 |---|---|
-| 4.x — Tracking MOTA / IDF1 / ID-switches, IoU vs SORT | Phase 4 |
 | 5.x — Closing-speed error; TTC error at TTC < 3 s | Phase 5 |
 | 6.x — Lane departure detection rate / FP rate | Phase 6 |
 | 7.x — FCW TPR and **FP per hour** at a named TTC threshold | Phase 7 |

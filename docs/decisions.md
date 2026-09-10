@@ -865,6 +865,87 @@ check is now: *before believing a summary statistic, ask what it is pooled over.
 
 ---
 
+## D-021 · Keep SORT's prediction, discard its smoothing; MOT metrics are self-implemented · 2026-09-09 · Active
+
+**Decision.** The tracker that ships is **SORT's association with the raw
+associated detection as output** (`sort_det`), not canonical SORT. The Kalman
+filter is kept for *predicting where to look*; its smoothed estimate is **not**
+used as the reported box.
+
+**Why — the ablation.** Canonical SORT bundles two changes against a greedy-IoU
+baseline: predict-then-associate, and emit the filtered state. Measured
+separately on val:
+
+| comparison | isolates | MOTA | MOTP | IDF1 | ID switches |
+|---|---|---|---|---|---|
+| `sort_det` − `iou` | association | +0.015 | +0.001 | **+0.035** | **−149 (−29%)** |
+| `sort` − `sort_det` | smoothing | −0.014 | **−0.033** | −0.007 | −4 |
+
+Association earns its complexity: **29% fewer ID switches**. Smoothing does not —
+it costs MOTP 0.769 → 0.735 for no identity benefit.
+
+**Why smoothing loses here.** The filter's process and measurement noise are
+generic priors from the reference implementation, not fitted to this detector's
+actual error, and a Kalman estimate can only beat its measurement when the
+measurement is noisier than the motion model. At 9.657 Hz with YOLOv8n the
+detection is the better-localised of the two, and the filter additionally lags
+whenever an object accelerates. **A filter is only worth its weight when you can
+show the measurement is worse than the model, and here it is not.**
+
+**What would reverse it.** Fitting `Q` and `R` to the measured detector error
+(Row 2.7 gives the box-height bias and spread to do it with), or a lower frame
+rate where extrapolation matters more. Both are open.
+
+### Kalman filter priors, logged as priors
+
+The covariances are the reference SORT values and are **not tuned**: velocities
+initialised at 1000× position uncertainty (a newborn track has one observation
+and no velocity information); scale and aspect measurements trusted 10× less than
+centre (detector boxes jitter more in size than position); small process noise on
+the velocity block (motion is near-constant between frames at 10 Hz). Hard rule 6
+applies to filter priors as much as to size priors — these are guesses with a
+rationale, not measurements.
+
+### A real limitation, found by a test whose premise was wrong
+
+A newborn track has **zero velocity**, so SORT's first prediction is just its
+birth box. An object moving further than its own width per frame therefore never
+associates even once, and the filter never gets the two observations it needs.
+**SORT cannot rescue what it never caught.** Fast-crossing objects fragment under
+*both* trackers, and SORT's advantage is confined to objects it has already
+locked onto. Locked in by
+`test_neither_tracker_can_bootstrap_on_an_object_that_never_overlaps`.
+
+### The metrics are self-implemented, and that is a caveat
+
+CLEAR MOT and IDF1 are implemented in `aps/motmetrics.py` rather than imported,
+validated against hand-computed synthetic cases (including that MOTA goes
+negative when false positives exceed ground truth, that a preserved
+correspondence survives a better-overlapping rival, and that IDF1 collapses on
+fragmentation where MOTA barely notices). They are **not** the official devkit.
+
+Combined with raw-tracklet labels ([D-004](#d-004)), tracking numbers here are
+valid for the IoU-vs-SORT comparison on identical data and **invalid as any
+claim of leaderboard-relative standing**.
+
+### MOTA measures the detector here, not the tracker
+
+~3450 misses and ~2430 false positives out of 8705, in every configuration —
+consistent with Phase 2's 60% recall. MOTA barely moves between trackers because
+no association strategy recovers an object that was never detected. **IDF1 and
+ID-switch counts are where the tracker is actually being measured**, which is why
+hard rule 8 demands all three rather than a single figure.
+
+### Dev pointed the wrong way, again
+
+A 60-frame dev run had `iou` ahead of `sort` on every metric (MOTA 0.603 vs
+0.523, IDF1 0.756 vs 0.583) on five objects. Val reversed it. That is the third
+time a small sample has misled in this project, after the 50+ m ruler bin
+([D-013](#d-013)) and the box-bias class-mean comparison ([D-018](#d-018)).
+**Dev is for wiring, never for conclusions.**
+
+---
+
 ## Open questions
 
 | Question | Blocks | Notes |

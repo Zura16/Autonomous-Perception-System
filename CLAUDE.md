@@ -112,11 +112,12 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Near-field error cause | **UNIDENTIFIED** — flat +0.7 m residual inside 13 m; ~0.3 m vehicle-specific, ~0.4 m common |
 | Closing-speed error vs GT | TBD |
 | TTC error where it matters (TTC < 3 s) | TBD |
-| Tracking MOTA / IDF1 / ID-switches — IoU vs SORT | TBD |
+| **Tracking (val, identical detections)** | `iou` MOTA 0.268 / IDF1 0.488 / **507 IDsw** · `sort` 0.270 / 0.515 / 354 · **`sort_det` 0.284 / 0.522 / 358** ← shipped |
+| Tracking ablation | association **−29% ID switches**; Kalman smoothing of the OUTPUT costs MOTP 0.769→0.735 and is discarded ([D-021](docs/decisions.md)) |
 | Lane departure detection rate / FP rate (labeled set) | TBD |
 | FCW: TPR and **FP per hour**, at threshold TTC = TBD | TBD |
 | Per-stage latency p50/p95/p99 | detection only so far — see above. Track/range/KF/decide not yet measured |
-| Test suite count | **95** |
+| Test suite count | **127** |
 
 ## Common commands (run from repo root)
 
@@ -137,7 +138,7 @@ python eval/eval_detection.py --split val                      # AP, recall-vs-r
 python eval/eval_box_quality.py --split val                   # detector box vs label box, per object
 python eval/eval_road_profile.py --split val                  # real road vs the assumed flat plane
 python eval/eval_range.py    --split val --bins 10,20,30,50   # → error-vs-range curve
-python eval/eval_tracking.py --split val --tracker iou|sort
+python eval/eval_tracking.py --split val                       # iou vs sort vs sort_det
 python eval/eval_ttc.py      --split val
 python eval/eval_fcw.py      --split val --ttc-threshold 2.0  # TPR + FP/hour
 python eval/eval_lane.py     --split val
@@ -160,7 +161,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - [x] **Phase 1 — Ground truth harness.** Project LiDAR into the image; per-detection GT range, with the ruler's own error and coverage characterised by range bin.
 - [x] **Phase 2 — Detection baseline.** YOLOv8n zero-shot: AP 0.615 class-agnostic, recall-vs-range measured, latency at 33% of budget at p99. No optimization — nothing missed the budget except five host stalls ([D-012](docs/decisions.md)).
 - [x] **Phase 3 — Monocular range + error-vs-range curve.** ✅ Two estimators, pitch characterised not corrected, envelope **10–30 m at ≤15% MAPE**. Headline artifact landed.
-- [ ] **Phase 4 — Tracking.** IoU baseline → SORT. MOTA/IDF1/ID-switches for both, honestly compared.
+- [x] **Phase 4 — Tracking.** ✅ IoU baseline vs SORT vs SORT-with-raw-output. Association buys −29% ID switches; canonical SORT's smoothing costs MOTP and is discarded ([D-021](docs/decisions.md)).
 - [ ] **Phase 5 — Closing speed + TTC.** Scale-rate estimator, KF over image-plane state, deadband. Validate on synthetic constant-velocity sequences first, then real data.
 - [ ] **Phase 6 — Lane detection + departure metric.** Scored on a labeled set. Failure set documented with frames.
 - [ ] **Phase 7 — FCW / AEB-request decision layer.** Evaluated as a detector: TPR **and FP/hour**.
@@ -171,18 +172,16 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 3 COMPLETE** (2026-09-02). Phases 0–2 ✅. **Next: Phase 4 — tracking (IoU baseline → SORT), MOTA/IDF1/ID-switches.**
-- **THE HEADLINE (val, N=6122 detections).** Monocular range MAPE by bin, contact-point **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %**. **Credible envelope: 10–30 m at ≤15% MAPE. No bin reaches 10%.** Graded by the Phase 1 ruler on the detector's own boxes — no label matching.
-- **The curve is U-shaped and that is the finding.** Error is *worst in the near field* (22.7% inside 10 m), not at range. A collision-warning system least accurate where collision is most imminent is uncomfortable and is reported, not smoothed.
-- **Partial cause: detector box height bias ([D-018](docs/decisions.md), corrected 09-09).** Measured per object against its own label box (5254 pairs): **−4.5% overall, −7.1% inside 10 m**, bottom edge 4.8 px high near. A **bias, not jitter** — the Phase 5 KF will not touch it. *An earlier −12% figure compared implied heights to a class mean and overstated it 2.6×.*
-- **FAR-RANGE CAUSE FOUND ([D-020](docs/decisions.md)): road non-flatness.** The real road falls ~10 cm below the assumed 1.655 m plane by 50 m. Predicted from geometry with **no free parameters** (`h_cam/y_act − 1`), it matches observation beyond 20 m to 0.1–0.6 m: predicted −0.59 vs observed −0.50 at 20–25 m, −2.46 vs −2.12 at 40–50 m. **The flat-ground assumption is the dominant contact-point error at range** — fixing it needs a road-profile estimate from the image, a research problem, not tuning.
-- **⚠ STILL OPEN: a flat +0.7 m near-field residual** inside 13 m (+0.68/+0.78/+0.68), which the road does not explain. ~0.3 m of it is vehicle-specific, ~0.4 m common to vehicles and VRUs. Suspects, untested: effective horizon row ≠ `cy` · `shrink_p20` on very large near-field boxes · detector bottom-edge placement on close cars vs close pedestrians.
-- **Size-prior bias fully explained** by the box shortfall — predicted +0.99 m vs observed +1.01 m, independent confirmation of [D-018](docs/decisions.md) by a different route.
-- **Overhang hypothesis rejected**, and my first test of it was **confounded by pooling across a range where the bias changes sign**. Redone within range bins: the vehicle−VRU gap is +0.94/+0.27/+0.41/+0.17 near but **−0.65/−0.59/−0.88/−1.11** beyond 13 m. Overhang predicts a constant positive gap; it is neither constant nor positive throughout.
-- **Pitch: resolved, and smaller than feared ([D-016](docs/decisions.md)).** LiDAR road-plane fit gives true camera-to-road pitch mean **+0.150°**, \|p95\| **0.715°**, camera height **1.655 m**. The earlier OXTS figures (2.0–2.2°) were the wrong quantity — navigation-frame vehicle pitch includes road grade — and overstated it 2–3×. Measured error is **flat across pitch** while the geometry predicts an 8× span, so pitch is currently masked by box bias. **Correcting pitch would have bought almost nothing**, which validates characterising it.
-- **Estimator crossover at ~20 m**, in the predicted direction (contact-point near, size-prior far). Do *not* read this as confirming the pitch model — Row 3.4 shows pitch is not the operative mechanism.
-- **Verified:** 95 tests, ruff + black clean. Two errors caught by tests this session: the linearised pitch formula used as if exact (understating cost by a third at 50 m), and a config gate (`min_rows_from_bottom`) declared but never implemented.
-- **Known issues:** 50+ bin rests on 91 detections · whole curve measured on the ~33% of objects both detected and groundtruthable, so it is a **lower bound** · no box-height calibration applied (fitting one on val would be tuning on the eval set) · pitch measured only on drives without hard braking.
+- **Phase:** **Phase 4 COMPLETE** (2026-09-09). Phases 0–3 ✅. **Next: Phase 5 — closing speed + TTC** (scale-rate estimator, KF over image-plane state, deadband).
+- **Tracking (val, 1450 frames, identical detections to all three).** `iou` MOTA 0.268 / MOTP 0.768 / IDF1 0.488 / **507 ID switches**; `sort` 0.270 / 0.735 / 0.515 / 354; **`sort_det` 0.284 / 0.769 / 0.522 / 358 ← shipped.**
+- **The ablation is the finding ([D-021](docs/decisions.md)).** Canonical SORT bundles two changes. Separated: **association buys −29% ID switches** and +0.035 IDF1, while **Kalman smoothing of the output costs MOTP 0.769→0.735** for no identity gain. Keep the prediction, discard the smoothing — at 9.657 Hz the raw detection is better localised than the filter smoothing it, and the filter lags under acceleration. Canonical SORT is *not* the best configuration on this data.
+- **MOTA here measures the DETECTOR, not the tracker** — ~3450 FN and ~2430 FP of 8705 in every config, matching Phase 2's 60% recall. IDF1 and ID-switch counts are where the tracker is measured, which is why hard rule 8 wants all three.
+- **ID switches concentrate at 10–20 m** (259 of 507 for the baseline, over 64 objects) — squarely inside Phase 3's 10–30 m operating envelope. SORT's association removes 43% of them there. This matters for Phase 5: a switch splices two objects' box-height histories and manufactures a closing speed from the seam.
+- **THE HEADLINE (Phase 3, val, N=6122).** Range MAPE contact-point **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %**. **Credible envelope 10–30 m at ≤15% MAPE**; no bin reaches 10%. Curve is U-shaped — worst in the near field.
+- **Far-range range error explained ([D-020](docs/decisions.md)): road non-flatness.** Road falls ~10 cm below the assumed 1.655 m plane by 50 m; predicted from geometry with no free parameters, matches observation beyond 20 m to 0.1–0.6 m.
+- **⚠ STILL OPEN: a flat +0.7 m near-field range residual** inside 13 m, ~0.3 m vehicle-specific. Suspects untested: effective horizon row ≠ `cy` · `shrink_p20` on very large boxes · detector bottom-edge placement on close cars.
+- **Verified:** 127 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val); detection AP@0.5 **0.615**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
+- **Known issues:** dev has now pointed the wrong way **three times** (50+ ruler bin, box-bias class mean, tracker ordering) — **dev is for wiring, never conclusions** · tracking metrics self-implemented and raw-tracklet labels, so not leaderboard-comparable · 50+ bins thin throughout.
 - **Standing warning:** draft resume bullets describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo** are not this system. Claims get generated from `benchmarks.md` in Phase 9.
 
 ## Project skills (slash commands)
