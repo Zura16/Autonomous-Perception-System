@@ -1,0 +1,58 @@
+# Scale-rate closing-speed / TTC filter.
+#
+# State is the inverse apparent height u = 1/h, which is proportional to range,
+# so a constant-velocity model is EXACT under constant relative velocity --
+# the same assumption TTC itself makes. See aps/motion.py and D-022.
+
+measurement:
+  # MEASURED, not assumed. Detector box-height error is multiplicative: the
+  # absolute spread varies 4x across range (9.9 -> 2.5 px) while the relative
+  # spread barely moves inside 30 m. Robust sd (IQR/1.349) on 5254 matched
+  # detector/label pairs, val (benchmarks.md Row 2.7 / Row 5.1):
+  #
+  #   0-10 m   5.7%      10-20 m  5.5%      20-30 m  6.9%
+  #   30-50 m 13.4%      50+     12.1%
+  #
+  # Propagating to u = 1/h leaves the relative error unchanged:
+  #   sigma_u = sigma_h / h^2 = sigma_rel / h = sigma_rel * u
+  rel_height_sigma: 0.06      # boxes taller than far_range_px
+  rel_height_sigma_far: 0.13  # small boxes, where the error roughly doubles
+  far_range_px: 35.0          # ~30 m for a car; the knee in the measured table
+
+process:
+  # PRIOR, not measured, and labelled as such (hard rule 6 applies to filter
+  # priors too). Relative acceleration in units of 1/s^2: since u is proportional
+  # to range, sigma_ar corresponds to D_ddot / D. A car braking at 5 m/s^2 at
+  # 20 m gives 0.25/s^2, which is the scale intended here.
+  #
+  # Too small and the filter lags a real deceleration -- exactly the manoeuvre
+  # an FCW exists for. Too large and it tracks detector jitter and invents
+  # closing speed. Not tuned on val; a sweep belongs in Phase 7 against the
+  # measured false-positive rate.
+  rel_accel_sigma: 0.25
+
+deadband:
+  # Hard rule 4: a deadband on the closing rate is mandatory, and its threshold
+  # is a logged decision with a MEASURED false-trigger rate. Both mechanisms are
+  # evaluated in eval/eval_ttc.py rather than one being asserted.
+
+  # 'fixed': reject when |1/TTC| is below this, i.e. an object whose implied
+  # TTC exceeds 1/0.05 = 20 s is declared not closing. A plain horizon.
+  inv_ttc: 0.05
+
+  # 'sigma': reject unless u_dot is negative at this many sigma of the filter's
+  # own covariance. Adapts to track quality instead of assuming it. 2.0 is the
+  # conventional ~97.7% one-sided confidence and is a starting point, not a
+  # result -- Phase 7 sets it against FP/hour.
+  sigmas: 2.0
+
+filter:
+  # Below this many observations the rate is dominated by its initial prior
+  # rather than by data, so no TTC is emitted at all. Two updates is the minimum
+  # that can define a rate; three gives the filter one correction of it.
+  min_updates: 3
+
+ttc:
+  # Reporting thresholds only. The OPERATING threshold for FCW is a Phase 7
+  # decision, set against a measured TPR and FP/hour -- not chosen here.
+  report_below_s: 3.0   # "TTC error where it matters" (CLAUDE.md reference table)

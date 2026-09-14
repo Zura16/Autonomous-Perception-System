@@ -35,6 +35,10 @@ row is a failure, not a warning.
 | C-16 | "Ablated SORT against an IoU baseline on identical detections: association buys 29% fewer ID switches, while the canonical Kalman-smoothed output costs MOTP and was discarded." | [Row 4.1–4.2](benchmarks.md) | *pending* | val, self-implemented metrics, raw-tracklet labels. NOT leaderboard-comparable. |
 | C-17 | "Showed MOTA on this data is detection-bound rather than association-bound — ~3450 of 8705 objects are never detected in any tracker configuration." | [Row 4.4](benchmarks.md) | *pending* | val. Consistent with the measured 60% detection recall. |
 
+| C-18 | "Built a calibration-free monocular TTC estimator — a Kalman filter over inverse box height — with 0.41 s MAE and 0.01 s median error at TTC under 3 s." | [Row 5.4](benchmarks.md) | *pending* | val, common subset N=1930, raw tracklet ground truth. Offline, open-loop. |
+| C-19 | "Measured that without a deadband 54% of stationary objects report a phantom closing speed, and predicted that rate from a measured detector noise model to within a tenth of a point." | [Row 5.1–5.2](benchmarks.md) | *pending* | val. The prediction holds for none/fixed deadbands; sigma's real rate is 13× its synthetic one. |
+| C-20 | "Showed an adaptive (n-sigma) deadband's apparent TTC accuracy gain was selection bias: it goes silent on 10% of imminent-threat frames." | [Row 5.4](benchmarks.md) | *pending* | val, GT TTC < 3 s. |
+
 Commit hashes are filled in by `/claim-check` once the measurement and the claim
 are in the same committed state.
 
@@ -52,7 +56,9 @@ Kept here because the tempting overstatement is more dangerous than the gap.
 | "Accurate to ±X m" (single figure) | Forbidden by hard rule 2 — error must be binned by range. |
 | Any tracking number "vs KITTI leaderboard" | Raw tracklets AND self-implemented metrics ([D-004](decisions.md), [D-021](decisions.md)). Two independent reasons. |
 | "Implemented SORT" without the ablation | The shipped tracker deliberately discards SORT's output smoothing; saying "SORT" alone misstates what was built and drops the finding. |
-| Anything about TTC or FCW | Not built. Phases 5–7. |
+| Anything about FCW, warnings, or braking decisions | Not built. Phase 7. TTC exists; no decision layer consumes it yet. |
+| "Accurate closing speed" | TTC is accurate; closing speed inherits range error (78% relative at 30–50 m). Say which one. |
+| "The sigma deadband is more accurate" | It is not — identical TTC on a common subset. It emits fewer TTCs. |
 | Per-class detection mAP (Car vs Van vs Truck) | Not recoverable from a COCO-trained model; the number would measure the mapping ([D-014](decisions.md)). |
 | "Monocular range is unreliable beyond 50 m" | NOT measured. 50 m is where the *evidence* runs out, not where the estimator fails. |
 | "Accurate to X% monocular range" (single figure) | Forbidden by hard rule 2, and the curve is U-shaped — a single figure hides that the near field is worst. |

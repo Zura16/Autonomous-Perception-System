@@ -390,3 +390,50 @@ ahead of `sort` on every metric. Dev is for wiring, never conclusions.
 **Next:** Phase 5 — closing speed and TTC. Scale-rate estimator with a KF over
 the image-plane state, deadband, validated on synthetic constant-velocity
 sequences before real data.
+
+---
+
+## 2026-09-14 — Phase 5: closing speed and TTC
+
+**Design.** State is `u = 1/h`. Because `u ∝ D`, it is exactly linear under
+constant relative velocity, so a constant-velocity Kalman filter is the exact
+model rather than an approximation. `TTC = −u/u̇` — calibration- and prior-free.
+
+**Measurement noise measured first.** The Phase 4 retrospective (D-021) had
+flagged SORT's unfitted priors. So before writing this filter, detector box-height
+error was measured on 5254 matched pairs: absolute spread swings 4× with range
+while relative spread stays at 5.5–6.9% inside 30 m. Multiplicative noise, which
+`u = 1/h` carries through unchanged. That number, not a guess, set the filter.
+
+**Results, val:** TTC at GT TTC < 3 s has MAE **0.41 s** and median error
+**+0.01 s**. Unbiased — the −4.5% box bias cancels in the ratio, as predicted.
+Closing speed inherits range error (28% → 78% relative MAE with range).
+
+**The noise model predicted reality.** A synthetic stationary-object test built on
+the measured 6% gave 54.2% phantom closing with no deadband; real val tracks gave
+**54.3%**. With a fixed deadband, 10.2% vs 11.9%.
+
+**Three things corrected before commit:**
+
+1. **"The adaptive deadband adapts to track quality"** — true, and useless at
+   matched phantom rates, where fixed and sigma are equivalent (1.5% phantom,
+   68% vs 66% detection).
+2. **"6 and 12 m/s approaches are detected 100% at every setting"** — false at
+   the strict end of my own sweep (fixed@0.30 catches 31% of 6 m/s approaches).
+3. **A test that asserted nothing.** The matched-rate equivalence test built two
+   estimators and never ran them, and passed. Rewritten to measure them.
+
+**The selection trap, caught.** sigma@2.0 posted TTC MAE 0.41 s against fixed's
+0.63 s. On the common subset every variant flags, all three are identical — a
+deadband only decides whether a TTC is emitted. sigma was withholding 185 frames
+with TTC MAE 3.00 s, and those were genuine threats (GT TTC median 2.15 s). It is
+silent on 10.2% of imminent-threat frames; fixed on 1.6%. That is the Phase 7 trade.
+
+This is the fourth comparison error the project has caught, and the first caught
+*before* publishing: compare on a common subset before crediting a filter.
+
+**Landed:** `aps/motion.py`, `configs/motion.yaml`, `eval/eval_ttc.py`, 22 new
+tests (149 total). ruff + black clean.
+
+**Next:** Phase 6 (lanes) per the milestone order, or Phase 7 (FCW), which now has
+a validated TTC to consume.

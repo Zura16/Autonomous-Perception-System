@@ -670,6 +670,123 @@ pointed the wrong way — see also the 50+ m ruler bin ([D-013](decisions.md)).
 
 ---
 
+## Phase 5 — Closing speed + TTC
+
+Scale-rate estimator, never range differencing (hard rule 3). State is the
+**inverse apparent height `u = 1/h`**, which is proportional to range, so a
+constant-velocity Kalman filter over `[u, u̇]` is exact under constant relative
+velocity. `TTC = −u/u̇` (focal length and object size cancel);
+closing speed `= −D_est/TTC`. Pipeline as shipped: YOLOv8n → `sort_det` →
+filter. Harness: `eval/eval_ttc.py`. Config: `configs/motion.yaml`.
+
+**Ground truth:** each track box matched to a tracklet at IoU ≥ 0.5; GT range is
+its near-face range, GT closing speed the least-squares slope of that range over
+±3 frames against sensor timestamps. Differencing is acceptable for the
+*reference* because tracklet poses are smooth annotations, not noisy per-frame
+depth — the exact distinction hard rule 3 draws.
+
+### Row 5.1 — Measurement noise, measured rather than assumed
+
+Detector box height vs label box height, val, 5254 matched pairs (robust sd).
+
+| bin (m) | absolute sd | **relative sd** |
+|---|---|---|
+| 0–10 | 9.88 px | **5.7%** |
+| 10–20 | 4.56 px | **5.5%** |
+| 20–30 | 3.39 px | **6.9%** |
+| 30–50 | 4.03 px | 13.4% |
+| 50+ | 2.48 px | 12.1% |
+
+Absolute spread varies 4× with range; relative spread barely moves inside 30 m.
+The noise is **multiplicative**, and `σ_u = σ_rel·u` carries it through `u = 1/h`
+unchanged. Configured: 6% for boxes ≥ 35 px, 13% below.
+
+### Row 5.2 — Phantom closing: the synthetic model predicts reality
+
+Phantom = a *relatively stationary* object (|GT closing speed| < 0.5 m/s) that the
+filter flags as closing. Synthetic = 400 stationary tracks with 6% height noise.
+Real = val tracks.
+
+| deadband | phantom, synthetic | **phantom, real val** | detect, real (GT v < −2 m/s) |
+|---|---|---|---|
+| none | 54.2% | **54.3%** | 96.0% |
+| fixed @ 0.05 (TTC > 20 s rejected) | 10.2% | **11.9%** | 92.7% |
+| sigma @ 2.0 | 0.2% | **2.6%** | 72.8% |
+
+Real val: 7852 track-frames, 497 relatively stationary, 3421 genuinely closing.
+
+**Without a deadband over half of stationary objects report closing** — hard
+rule 4's bug, measured on real tracks. And the measured-noise synthetic model
+predicts the real rate to within a point for `none` and `fixed`. sigma's real
+phantom rate is 13× its synthetic one: real tracks carry non-Gaussian error
+(splices, clipped boxes) that a covariance-based gate reads as signal.
+
+### Row 5.3 — Deadband sweep (synthetic, 6% noise)
+
+| setting | phantom | detect @ 3 m/s | @ 6 m/s | @ 12 m/s |
+|---|---|---|---|---|
+| fixed 0.05 | 10.2% | 96% | 100% | 100% |
+| fixed 0.10 | 1.5% | 68% | 100% | 100% |
+| fixed 0.15 | 0.2% | 20% | 100% | 100% |
+| fixed 0.20 | 0.0% | 4% | 96% | 100% |
+| fixed 0.30 | 0.0% | 0% | **31%** | 100% |
+| sigma 1.0 | 4.2% | 88% | 100% | 100% |
+| sigma 1.5 | 1.5% | 66% | 100% | 100% |
+| sigma 2.0 | 0.2% | 26% | 100% | 100% |
+| sigma 3.0 | 0.0% | 4% | 92% | 100% |
+
+**At matched phantom rates the two mechanisms are equivalent** (fixed 0.10 and
+sigma 1.5: 1.5% / 68% vs 66%). The deadband trades slow-approach sensitivity for
+phantom suppression; 12 m/s is caught everywhere, and only the strictest settings
+begin losing 6 m/s approaches.
+
+### Row 5.4 — TTC accuracy where it matters
+
+A deadband decides **whether** a TTC is emitted, never its value. So accuracy is
+reported on the common subset every variant flags:
+
+| GT TTC | common N | MAE | median error | rel MAE | p90 \|e\| |
+|---|---|---|---|---|---|
+| **< 3 s** | 1930 | **0.41 s** | **+0.01 s** | 30% | 1.02 s |
+| < 6 s | 2422 | 0.53 s | −0.01 s | 29% | 1.42 s |
+
+**TTC is unbiased** — median error +0.01 s. The −4.5% detector box-height bias
+(Row 2.7) cancels exactly, as the algebra predicts, because TTC is a ratio of
+`u` to its own rate.
+
+Coverage of imminent threats (GT TTC < 3 s, N = 2150), i.e. how often a TTC is
+emitted at all:
+
+| deadband | emitted | **silent** |
+|---|---|---|
+| none | 2124 | 1.2% |
+| fixed @ 0.05 | 2115 | 1.6% |
+| sigma @ 2.0 | 1930 | **10.2%** |
+
+**sigma's apparently better headline TTC error was selection.** The 185 frames
+fixed flags and sigma withholds have TTC MAE **3.00 s** — sigma rejects exactly
+the worst estimates — but they are real threats, GT TTC median **2.15 s** at
+~23 m. sigma trades one in ten imminent-threat frames for 9 fewer points of
+phantom rate. That trade is not made here; Phase 7 makes it against FP/hour.
+
+### Row 5.5 — Closing-speed error (inherits range error)
+
+`closing speed = −D_est/TTC`, so every Phase 3 range error propagates in.
+No deadband, frames where GT and estimate both say closing:
+
+| bin (m) | N | median error | MAE | rel MAE |
+|---|---|---|---|---|
+| 0–10 | 661 | −0.74 m/s | 1.88 m/s | 28% |
+| 10–20 | 1132 | −0.34 m/s | 2.35 m/s | 32% |
+| 20–30 | 680 | +0.94 m/s | 4.04 m/s | 51% |
+| 30–50 | 621 | +1.38 m/s | 6.72 m/s | 78% |
+
+**Closing speed is roughly 2.5× worse than TTC in relative terms beyond 20 m**,
+because TTC is calibration-free and closing speed is not. For a warning system
+this favours deciding on TTC and reporting closing speed as context.
+
+---
+
 ## Pending — nothing measured yet
 
 These rows are deliberately empty. A value here that is not a measurement is the
@@ -677,7 +794,6 @@ failure mode this file exists to prevent.
 
 | Row | Blocks on |
 |---|---|
-| 5.x — Closing-speed error; TTC error at TTC < 3 s | Phase 5 |
 | 6.x — Lane departure detection rate / FP rate | Phase 6 |
 | 7.x — FCW TPR and **FP per hour** at a named TTC threshold | Phase 7 |
 | 8.x — End-to-end latency p50/p95/p99 vs budget | Phase 8 |

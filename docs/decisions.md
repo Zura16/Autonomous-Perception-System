@@ -946,6 +946,89 @@ time a small sample has misled in this project, after the 50+ m ruler bin
 
 ---
 
+## D-022 · Scale-rate TTC over inverse height; the deadband is a gate, not a smoother · 2026-09-14 · Active
+
+**Decision.** Closing speed and TTC come from a constant-velocity Kalman filter
+over **`u = 1/h`**, never from differencing range. Measurement noise is
+**measured** (multiplicative, 6% / 13%); process noise is a labelled prior.
+Both deadbands ship behind a switch; the operating point is **not** chosen here.
+
+**Why `u = 1/h` and not `h`.** `h = f·H/D`, so `u = D/(f·H)` is proportional to
+range. Under constant relative velocity range is linear in time, so `u` is
+*exactly* linear and a constant-velocity model is exact — under the same
+assumption TTC itself makes. A constant-rate model on `h` is wrong because `h`
+grows hyperbolically, and it is most wrong at close range. Locked in by
+`test_inverse_height_is_linear_in_time_under_constant_velocity` (second
+difference zero to 1e-12).
+
+**Why TTC is the quantity to trust.** `TTC = −u/u̇`: focal length and object
+height cancel. So TTC needs no calibration, no size prior, and is immune to a
+multiplicative box bias. Measured on val it is **unbiased** (median error
++0.01 s at GT TTC < 3 s) despite the −4.5% box-height bias that distorts range.
+Closing speed `= −D_est/TTC` inherits every range error and is ~2.5× worse in
+relative terms beyond 20 m (Row 5.5).
+
+**Measurement noise, measured.** Detector box-height error is multiplicative —
+relative sd 5.5–6.9% inside 30 m while absolute sd swings 4× — so
+`σ_u = σ_rel·u` (Row 5.1). The payoff: a synthetic model built on that number
+predicted the **real** phantom rate to within a point (54.2% vs 54.3% with no
+deadband; 10.2% vs 11.9% fixed). A noise model you can check against reality is
+worth more than one you tuned to it.
+
+**Process noise is a prior.** `rel_accel_sigma = 0.25 /s²` ≈ a car braking at
+5 m/s² at 20 m. Not swept, not fitted. Too small lags a real deceleration; too
+large tracks jitter.
+
+### The deadband: what it actually does
+
+Without one, **54.3% of relatively stationary objects report closing** on real
+tracks. That is hard rule 4's bug, measured.
+
+Two mechanisms were built — a fixed `|1/TTC|` horizon and an n-sigma gate on
+the filter's own covariance — with the stated expectation that the adaptive one
+would be better. Measured:
+
+1. **At matched phantom rates they are equivalent** (synthetic: fixed 0.10 and
+   sigma 1.5 both give 1.5% phantom, 68% vs 66% detection of a 3 m/s approach).
+   The adaptivity argument was intuition, not evidence.
+
+2. **A deadband never changes a TTC value, only whether one is emitted.** On the
+   frames every variant flags, TTC MAE is identical: 0.41 s at GT TTC < 3 s.
+   sigma@2.0's headline error was lower only because it withheld 185 frames
+   whose TTC was badly wrong (MAE 3.00 s) — and those frames were **real threats**,
+   GT TTC median 2.15 s at ~23 m. sigma is silent on **10.2%** of imminent-threat
+   frames; fixed@0.05 on 1.6%.
+
+3. **sigma is more fragile to real-world error than the synthetic test shows**:
+   real phantom 2.6% vs synthetic 0.2% (13×), against 11.9% vs 10.2% for fixed.
+   Real tracks carry splices and clipped boxes that inflate the filter's apparent
+   confidence rather than its uncertainty.
+
+So the choice is not "which deadband is better" but "what fraction of imminent
+threats are you willing to go silent on to cut phantom triggers." That is exactly
+the FP/hour-vs-TPR trade Phase 7 exists to make, and it is deferred there.
+
+**Two claims corrected before commit.** The module docstring said sigma "adapts
+to track quality" as if that made it better (it does not, at matched rates), and
+that 6 and 12 m/s approaches were detected "100% at every setting swept" (false:
+fixed@0.30 catches 31% of 6 m/s approaches). A test written to prove the
+equivalence also originally built two estimators and never ran them — it passed
+while asserting nothing, and was rewritten to measure the matched configurations.
+
+**Second-order term, not yet measured.** The box bias is not constant with range
+(−7.1% near, −2.4% at 20–30 m). As an object approaches, a changing bias injects
+a spurious scale rate; a rough bound is ~5% on TTC at 20 m and 10 m/s. The
+unbiased median suggests it is small on val, but it has not been isolated.
+
+**Interview version.** "TTC from inverse box height is calibration-free — focal
+length and object size cancel — so our 4.5% box bias doesn't touch it: median
+TTC error is 0.01 s, MAE 0.41 s under 3 s. Without a deadband 54% of stationary
+objects fake a closing speed. The adaptive deadband looked better until I
+compared on a common subset — it just goes silent on the hardest 10% of imminent
+threats."
+
+---
+
 ## Open questions
 
 | Question | Blocks | Notes |

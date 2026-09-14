@@ -110,14 +110,16 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Detector box height bias (val, 5254 pairs) | **−4.5% overall · −7.1% at 0–10 m** · bottom edge −4.8 px near. A bias, not jitter ([D-018](docs/decisions.md)) |
 | Far-range error cause | **road non-flatness** — road 10 cm below the assumed plane by 50 m; explains most of the bias beyond 20 m ([D-020](docs/decisions.md)) |
 | Near-field error cause | **UNIDENTIFIED** — flat +0.7 m residual inside 13 m; ~0.3 m vehicle-specific, ~0.4 m common |
-| Closing-speed error vs GT | TBD |
-| TTC error where it matters (TTC < 3 s) | TBD |
+| Closing-speed error vs GT (val, no deadband) | rel MAE **28 / 32 / 51 / 78 %** by bin 0–10…30–50 m — inherits range error ([D-022](docs/decisions.md)) |
+| **TTC error where it matters (GT TTC < 3 s)** | MAE **0.41 s**, median **+0.01 s** (unbiased), rel 30%, p90 1.02 s — common subset N=1930 |
+| Phantom closing (relatively stationary) | **54.3%** no deadband · 11.9% fixed@0.05 · 2.6% sigma@2.0 — synthetic model predicted 54.2 / 10.2 |
+| Imminent threats silenced (GT TTC < 3 s) | none 1.2% · fixed 1.6% · **sigma 10.2%** — deadband operating point deferred to Phase 7 |
 | **Tracking (val, identical detections)** | `iou` MOTA 0.268 / IDF1 0.488 / **507 IDsw** · `sort` 0.270 / 0.515 / 354 · **`sort_det` 0.284 / 0.522 / 358** ← shipped |
 | Tracking ablation | association **−29% ID switches**; Kalman smoothing of the OUTPUT costs MOTP 0.769→0.735 and is discarded ([D-021](docs/decisions.md)) |
 | Lane departure detection rate / FP rate (labeled set) | TBD |
 | FCW: TPR and **FP per hour**, at threshold TTC = TBD | TBD |
 | Per-stage latency p50/p95/p99 | detection only so far — see above. Track/range/KF/decide not yet measured |
-| Test suite count | **127** |
+| Test suite count | **149** |
 
 ## Common commands (run from repo root)
 
@@ -139,7 +141,7 @@ python eval/eval_box_quality.py --split val                   # detector box vs 
 python eval/eval_road_profile.py --split val                  # real road vs the assumed flat plane
 python eval/eval_range.py    --split val --bins 10,20,30,50   # → error-vs-range curve
 python eval/eval_tracking.py --split val                       # iou vs sort vs sort_det
-python eval/eval_ttc.py      --split val
+python eval/eval_ttc.py      --split val                      # TTC, closing speed, phantom rate
 python eval/eval_fcw.py      --split val --ttc-threshold 2.0  # TPR + FP/hour
 python eval/eval_lane.py     --split val
 
@@ -162,7 +164,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - [x] **Phase 2 — Detection baseline.** YOLOv8n zero-shot: AP 0.615 class-agnostic, recall-vs-range measured, latency at 33% of budget at p99. No optimization — nothing missed the budget except five host stalls ([D-012](docs/decisions.md)).
 - [x] **Phase 3 — Monocular range + error-vs-range curve.** ✅ Two estimators, pitch characterised not corrected, envelope **10–30 m at ≤15% MAPE**. Headline artifact landed.
 - [x] **Phase 4 — Tracking.** ✅ IoU baseline vs SORT vs SORT-with-raw-output. Association buys −29% ID switches; canonical SORT's smoothing costs MOTP and is discarded ([D-021](docs/decisions.md)).
-- [ ] **Phase 5 — Closing speed + TTC.** Scale-rate estimator, KF over image-plane state, deadband. Validate on synthetic constant-velocity sequences first, then real data.
+- [x] **Phase 5 — Closing speed + TTC.** ✅ KF over `u = 1/h` (exact under constant velocity), measured noise model, TTC unbiased (MAE 0.41 s < 3 s). Deadband measured as a gate; operating point deferred to Phase 7 ([D-022](docs/decisions.md)).
 - [ ] **Phase 6 — Lane detection + departure metric.** Scored on a labeled set. Failure set documented with frames.
 - [ ] **Phase 7 — FCW / AEB-request decision layer.** Evaluated as a detector: TPR **and FP/hour**.
 - [ ] **Phase 8 — HUD + top-down view.** Deliberately last. It presents results that already exist.
@@ -172,15 +174,15 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 4 COMPLETE** (2026-09-09). Phases 0–3 ✅. **Next: Phase 5 — closing speed + TTC** (scale-rate estimator, KF over image-plane state, deadband).
-- **Tracking (val, 1450 frames, identical detections to all three).** `iou` MOTA 0.268 / MOTP 0.768 / IDF1 0.488 / **507 ID switches**; `sort` 0.270 / 0.735 / 0.515 / 354; **`sort_det` 0.284 / 0.769 / 0.522 / 358 ← shipped.**
-- **The ablation is the finding ([D-021](docs/decisions.md)).** Canonical SORT bundles two changes. Separated: **association buys −29% ID switches** and +0.035 IDF1, while **Kalman smoothing of the output costs MOTP 0.769→0.735** for no identity gain. Keep the prediction, discard the smoothing — at 9.657 Hz the raw detection is better localised than the filter smoothing it, and the filter lags under acceleration. Canonical SORT is *not* the best configuration on this data.
-- **MOTA here measures the DETECTOR, not the tracker** — ~3450 FN and ~2430 FP of 8705 in every config, matching Phase 2's 60% recall. IDF1 and ID-switch counts are where the tracker is measured, which is why hard rule 8 wants all three.
-- **ID switches concentrate at 10–20 m** (259 of 507 for the baseline, over 64 objects) — squarely inside Phase 3's 10–30 m operating envelope. SORT's association removes 43% of them there. This matters for Phase 5: a switch splices two objects' box-height histories and manufactures a closing speed from the seam.
+- **Phase:** **Phase 5 COMPLETE** (2026-09-14). Phases 0–4 ✅. **Next: Phase 6 — lane detection + departure metric** (or Phase 7 FCW, which Phase 5 now feeds directly).
+- **TTC is the trustworthy output ([D-022](docs/decisions.md)).** Filter over `u = 1/h` (proportional to range, so exact under constant velocity). `TTC = −u/u̇` is calibration- and prior-free. On val at GT TTC < 3 s: **MAE 0.41 s, median +0.01 s** — unbiased, because the −4.5% box bias cancels in the ratio. Closing speed inherits range error (rel MAE 28 → 78 % by range).
+- **Measured noise model predicts reality.** Box-height noise is multiplicative (5.5–6.9 % inside 30 m). Synthetic tracks on that number predicted real phantom rates: **54.2 vs 54.3 %** with no deadband, 10.2 vs 11.9 % fixed.
+- **Deadband is a gate, not a smoother.** Without one **54.3 %** of stationary objects fake closing. It never changes a TTC value — only whether one is emitted. sigma@2.0's better headline error was selection: it goes silent on **10.2 %** of imminent threats (GT TTC median 2.15 s). Fixed and sigma are equivalent at matched phantom rates. **Operating point deferred to Phase 7.**
+- **Tracking (Phase 4).** `sort_det` shipped: MOTA 0.284 / IDF1 0.522 / 358 ID switches; association −29 % ID switches, output smoothing discarded ([D-021](docs/decisions.md)).
 - **THE HEADLINE (Phase 3, val, N=6122).** Range MAPE contact-point **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %**. **Credible envelope 10–30 m at ≤15% MAPE**; no bin reaches 10%. Curve is U-shaped — worst in the near field.
 - **Far-range range error explained ([D-020](docs/decisions.md)): road non-flatness.** Road falls ~10 cm below the assumed 1.655 m plane by 50 m; predicted from geometry with no free parameters, matches observation beyond 20 m to 0.1–0.6 m.
 - **⚠ STILL OPEN: a flat +0.7 m near-field range residual** inside 13 m, ~0.3 m vehicle-specific. Suspects untested: effective horizon row ≠ `cy` · `shrink_p20` on very large boxes · detector bottom-edge placement on close cars.
-- **Verified:** 127 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val); detection AP@0.5 **0.615**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
+- **Verified:** 149 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val); detection AP@0.5 **0.615**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
 - **Known issues:** dev has now pointed the wrong way **three times** (50+ ruler bin, box-bias class mean, tracker ordering) — **dev is for wiring, never conclusions** · tracking metrics self-implemented and raw-tracklet labels, so not leaderboard-comparable · 50+ bins thin throughout.
 - **Standing warning:** draft resume bullets describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo** are not this system. Claims get generated from `benchmarks.md` in Phase 9.
 

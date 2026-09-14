@@ -23,7 +23,7 @@ to be able to say exactly why, with numbers.
 
 ## Status
 
-**Phases 0–4 of 9 complete**, including the headline artifact: the monocular
+**Phases 0–5 of 9 complete**, including the headline artifact: the monocular
 error-vs-range curve, graded by a LiDAR ruler whose own error was characterised
 first. That ordering is deliberate — an estimator with no ground truth is a
 decoration.
@@ -35,7 +35,7 @@ decoration.
 | 2 | **Detection baseline** (AP + recall-vs-range + latency) | ✅ |
 | 3 | **Monocular range + error-vs-range curve** ← headline | ✅ |
 | 4 | **Tracking**: IoU → SORT, MOTA/IDF1/ID-switches | ✅ |
-| 5 | Closing speed + TTC (scale-rate + KF) | — |
+| 5 | **Closing speed + TTC** (scale-rate + KF) | ✅ |
 | 6 | Lane detection + departure metric | — |
 | 7 | FCW decision layer: TPR **and FP/hour** | — |
 | 8 | HUD + top-down view *(deliberately last)* | — |
@@ -223,6 +223,35 @@ inside the 10–30 m operating envelope. That matters downstream: Phase 5 reads 
 per-object box-height history, and a switch splices two objects' histories
 together and manufactures a closing speed out of the seam.
 
+## What Phase 5 established
+
+Closing speed and time-to-collision from a Kalman filter over the **inverse box
+height `u = 1/h`** — never by differentiating range. `u` is proportional to
+range, so a constant-velocity model is exact under constant relative velocity,
+and `TTC = −u/u̇` has focal length and object size cancel out of it.
+
+| val, GT TTC < 3 s (N = 1930) | |
+|---|---|
+| TTC MAE | **0.41 s** (30% relative, p90 1.02 s) |
+| TTC median error | **+0.01 s** — unbiased |
+
+**TTC is unbiased because the detector's −4.5% box-height bias cancels in the
+ratio.** The same bias that distorts Phase 3's range costs TTC nothing. Closing
+speed, which needs range to scale it, inherits that error: 28% relative MAE near,
+78% at 30–50 m. So a warning system should decide on TTC and report closing speed
+as context.
+
+**Without a deadband, 54.3% of stationary objects report a closing speed.** The
+box-height noise was measured (multiplicative, ~6% inside 30 m) and a synthetic
+model built on it predicted that real-world figure to within a tenth of a point.
+
+**The adaptive deadband looked better and wasn't.** A deadband never changes a
+TTC value, only whether one is emitted. On the frames every variant flags, error
+is identical. The sigma gate's lower headline error came from staying silent on
+the hardest 10% of imminent-threat frames — real threats, median TTC 2.15 s.
+Choosing how many of those to give up for fewer phantom triggers is Phase 7's
+decision, against FP/hour.
+
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
 
@@ -252,6 +281,7 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `aps/geometry.py` | Monocular range: contact-point and size-prior estimators |
 | `aps/tracking.py` | IoU baseline, SORT, and the box Kalman filter |
 | `aps/motmetrics.py` | CLEAR MOT and IDF1, self-implemented |
+| `aps/motion.py` | Scale-rate TTC: Kalman filter over inverse box height, deadbands |
 | `aps/groundplane.py` | LiDAR road-plane fit — camera height and pitch, GT only |
 | `aps/matching.py` | IoU, greedy association, ignore regions, average precision |
 | `aps/viz.py` | Debug rendering (not the HUD — that is Phase 8) |
@@ -259,7 +289,7 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `eval/` | Evaluation harnesses (detection; range/tracking/TTC to come) |
 | `configs/dataset.yaml` | The split. Changing it invalidates every benchmark row |
 | `docs/` | Benchmarks, decisions, error budget, glossary, history |
-| `tests/` | Closed-form geometry, AP and MOT cases; 127 tests |
+| `tests/` | Closed-form geometry, AP, MOT and constant-velocity TTC cases; 149 tests |
 | `eval/eval_box_quality.py` | Detector box vs label box, per object — the D-018 harness |
 | `legacy/` | The v1 demo, archived. **Not a baseline** — see below |
 
