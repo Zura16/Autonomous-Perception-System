@@ -1029,6 +1029,89 @@ threats."
 
 ---
 
+## D-023 · Lanes scored on the KITTI road benchmark, parameters frozen first, per-frame threshold metric distrusted · 2026-09-15 · Active
+
+**Decision.** Phase 6 is scored on the 95 human-labelled `um_lane` frames of the
+KITTI road benchmark. Solver parameters were committed (`27904fe`) **before** the
+set was first evaluated. Offset is reported with and without two
+lane-straddling frames identified from ground truth alone. The departure warning
+is reported by ground-truth condition, not as a single hit rate.
+
+**Why this set.** KITTI raw has no lane labels, and hard rule 9 forbids scoring on
+a hand-picked clip. The road benchmark is the same camera rig, ships human
+ego-lane masks, and gives each frame a camera-to-road fit, so boundaries can be
+projected into metres. Costs, stated: N=95, urban, daytime, single frames (no
+temporal departure events), and the benchmark's test labels are withheld, so
+there is no held-out lane set.
+
+**Why parameters were committed before evaluation.** With no held-out lane set,
+any value adjusted after seeing results is tuned on the only evaluation data.
+Committing first makes that auditable from history rather than from a comment.
+**Nothing was changed after evaluation**, including the one flaw found below.
+
+**Metric frame.** The estimator's bird's-eye view is metric, so offsets are in
+metres and estimate and ground truth share a frame. The nominal geometry (level
+camera, 1.655 m, from raw drives) is what a deployed system has; the oracle uses
+each frame's fit. Measured: nominal costs a lateral **bias** growing with distance
+(+0.08 → +0.26 m), while spread is nearly the same under both.
+
+### Findings
+
+1. **Detection 97.9%; offset MAE 0.18 m excluding straddling frames** (0.26 m
+   with them). Width bias +0.17 m, **predicted before running** from the marking-
+   centre vs lane-edge convention (+0.12 to +0.25 m) and identical under both
+   geometries.
+
+2. **The two ~4 m errors are lane-identity disagreements, not localisation
+   failures.** In `um_000010` and `um_000045` the camera centreline lies outside
+   the labelled ego lane. The estimator's nearer boundary is the line being
+   crossed, and the departure warning fires correctly. The offset metric charges
+   a whole lane width for a labelling convention.
+
+3. **A per-frame warning hit rate at a hard threshold mostly measures threshold
+   proximity.** 13 frames meet the rule, but 8 clear it by 0.01–0.09 m while
+   lateral error is ~0.18 m. The informative rows: **3/5 body-over-line frames
+   caught (95% CI 23–88%)** and **2/82 false warnings (2.4%)**. N=5 decides very
+   little, and it is said so.
+
+### Three hypotheses refuted while diagnosing the failures
+
+In the order tried, each checked against data before being written down:
+
+- **"The failed boundaries are kerbs, invisible to a marking filter."** The
+  marking filter responds along 94/95 labelled left edges and 95/95 right edges
+  (± 0.3 m, 7–20 m ahead), including the failed frames. Refuted. (Caveat: the
+  filter responds to any thin bright line, kerb faces included, so this shows
+  the evidence was *visible*, not that it was *paint*.)
+- **"A yaw rotation in the per-frame road fit puts ground truth in a rotated
+  frame."** Yaw is −0.44° in every frame (p5–p95 −0.442 to −0.403°). Refuted.
+  The diagonal ground truth that prompted it came from **my diagnostic reading
+  the boundary fit at 25 m, beyond the label's ~17 m extent** — extrapolation of
+  a quadratic, not a frame error.
+- **"The ±0.4 m search deadzone hides the line a departing car is on."** 1 of 13
+  warning frames has its nearer boundary inside the deadzone, and it was caught.
+  Refuted. The real pattern was threshold grazing (finding 3).
+
+**Standing lesson, extended.** Earlier entries caught errors of *reference* and
+*pooling*; this phase adds **extrapolation**: a fitted curve read outside its
+data looked like a geometry bug. Evaluate a fit only where it has support —
+`Boundary.covers()` exists, and the harness uses it; the ad-hoc diagnostic did not.
+
+**Open.** Three failure-set frames (`um_000084`, `um_000043`, `um_000016`) are
+rendered but not inspected. A lane-identity-aware offset metric (score against
+whichever adjacent lane the estimate chose) would separate identity from
+localisation cleanly; not built. Any parameter change now needs a new labelled
+set to be credible.
+
+**Interview version.** "Lane offset error is 0.18 m on 95 labelled KITTI frames
+with parameters frozen before evaluation. Two frames showed 4-metre errors, but
+the car was straddling the line: the solver found the line being crossed and
+warned correctly, and the metric charged a lane width for a labelling
+convention. Of 13 'departure' frames, 8 graze the threshold by under 9 cm, so the
+honest departure result is 3 of 5 body-over-line frames with a 23–88% interval."
+
+---
+
 ## Open questions
 
 | Question | Blocks | Notes |

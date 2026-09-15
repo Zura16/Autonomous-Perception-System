@@ -437,3 +437,45 @@ tests (149 total). ruff + black clean.
 
 **Next:** Phase 6 (lanes) per the milestone order, or Phase 7 (FCW), which now has
 a validated TTC to consume.
+
+---
+
+## 2026-09-15 — Phase 6: lane detection and the departure metric
+
+**Labelled data first.** KITTI raw has no lane labels. The KITTI road benchmark
+(449 MB) has 95 `um_lane` frames with human ego-lane masks and a per-frame
+camera-to-road fit. Projected ground-truth lane width came out at a median
+3.45 m before any estimator existed, which validated the projection.
+
+**Parameters frozen before evaluation.** The solver and `configs/lanes.yaml` were
+committed (`27904fe`) before the labelled set was first scored. With no held-out
+lane set, that commit is what makes "not tuned on the evaluation data" auditable.
+
+**Results:** detection 97.9%, offset MAE 0.18 m excluding two straddling frames
+(0.26 m with them), width bias +0.17 m — predicted beforehand from the
+marking-centre vs lane-edge convention. Fixed nominal geometry costs a lateral
+bias growing from +0.08 to +0.26 m with distance.
+
+**The gross errors were not errors.** The two ~4 m frames are the only two where
+the camera centreline lies outside the labelled lane: the car was straddling the
+line, the solver found that line and warned correctly.
+
+**The departure metric needed re-reading.** 13 frames meet the warning rule, but
+8 graze its threshold by under 9 cm. Reported by condition instead: 3/5
+body-over-line frames caught (CI 23–88%), 2/82 false warnings.
+
+**Three hypotheses refuted, in order.** (1) "The failed edges are unpainted kerbs"
+— the marking filter responds along 94–95 of 95 labelled edges. (2) "A yaw in the
+road fit rotates the ground truth" — yaw is −0.44° everywhere; the diagonal that
+prompted it was my diagnostic reading a quadratic fit at 25 m, past the label's
+~17 m extent. (3) "The ±0.4 m search deadzone hides a departing car's line" — 1
+of 13 frames, and it was caught. Nothing in the frozen config was changed.
+
+**New lesson:** evaluate a fitted curve only where it has support. The harness
+did; an ad-hoc diagnostic did not.
+
+**Landed:** `aps/kitti/road.py`, `aps/lanes.py`, `configs/lanes.yaml`,
+`eval/eval_lane.py`, 8 failure images, 19 new tests (168 total).
+
+**Next:** Phase 7 — the FCW / AEB-request decision layer, evaluated as a detector
+with TPR and FP/hour, consuming Phase 5's TTC.

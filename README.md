@@ -23,7 +23,7 @@ to be able to say exactly why, with numbers.
 
 ## Status
 
-**Phases 0–5 of 9 complete**, including the headline artifact: the monocular
+**Phases 0–6 of 9 complete**, including the headline artifact: the monocular
 error-vs-range curve, graded by a LiDAR ruler whose own error was characterised
 first. That ordering is deliberate — an estimator with no ground truth is a
 decoration.
@@ -36,7 +36,7 @@ decoration.
 | 3 | **Monocular range + error-vs-range curve** ← headline | ✅ |
 | 4 | **Tracking**: IoU → SORT, MOTA/IDF1/ID-switches | ✅ |
 | 5 | **Closing speed + TTC** (scale-rate + KF) | ✅ |
-| 6 | Lane detection + departure metric | — |
+| 6 | **Lane detection + departure metric** | ✅ |
 | 7 | FCW decision layer: TPR **and FP/hour** | — |
 | 8 | HUD + top-down view *(deliberately last)* | — |
 | 9 | Writeup | — |
@@ -252,6 +252,36 @@ the hardest 10% of imminent-threat frames — real threats, median TTC 2.15 s.
 Choosing how many of those to give up for fewer phantom triggers is Phase 7's
 decision, against FP/hour.
 
+## What Phase 6 established
+
+KITTI raw has no lane labels, so lanes are scored on the KITTI road benchmark's
+95 human-labelled ego-lane frames — same camera rig. **The solver's parameters
+were committed before that set was first evaluated**, because it is the only
+labelled lane data available and any later change would be tuning on it.
+
+| 95 labelled frames | |
+|---|---|
+| both lane boundaries detected | **97.9%** |
+| lane-centre offset MAE | **0.18 m** (0.26 m including two lane-straddling frames) |
+| departure warning, vehicle body over a line | **3 of 5** (95% CI 23–88%) |
+| false departure warnings on clear frames | **2 of 82 (2.4%)** |
+
+**Two frames showed 4-metre offset errors, and the solver was right in both.**
+The car was straddling a lane line; the solver reported the lane its centreline
+was in and fired the departure warning correctly, while the label named the lane
+being entered. The offset metric charged a full lane width for a labelling
+convention.
+
+**Most "departure" frames are not departures.** 13 frames meet the warning rule,
+but 8 of them clear its threshold by under 9 cm, against ~18 cm of lateral error
+— whether those warn is a coin flip, whatever the solver does. So the result is
+stated where it means something: 3 of 5 frames with the car's body over a line,
+with an interval wide enough to show that five frames decide very little.
+
+The failure set is in [docs/failure-modes.md](docs/failure-modes.md) with images.
+Night, rain, construction and sharp curves are not in this set at all and remain
+uncharacterised.
+
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
 
@@ -282,6 +312,8 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `aps/tracking.py` | IoU baseline, SORT, and the box Kalman filter |
 | `aps/motmetrics.py` | CLEAR MOT and IDF1, self-implemented |
 | `aps/motion.py` | Scale-rate TTC: Kalman filter over inverse box height, deadbands |
+| `aps/lanes.py` | Metric bird's-eye lane solver and ground-truth extraction |
+| `aps/kitti/road.py` | KITTI road benchmark loader: labelled lanes and per-frame road plane |
 | `aps/groundplane.py` | LiDAR road-plane fit — camera height and pitch, GT only |
 | `aps/matching.py` | IoU, greedy association, ignore regions, average precision |
 | `aps/viz.py` | Debug rendering (not the HUD — that is Phase 8) |
@@ -289,7 +321,7 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `eval/` | Evaluation harnesses (detection; range/tracking/TTC to come) |
 | `configs/dataset.yaml` | The split. Changing it invalidates every benchmark row |
 | `docs/` | Benchmarks, decisions, error budget, glossary, history |
-| `tests/` | Closed-form geometry, AP, MOT and constant-velocity TTC cases; 149 tests |
+| `tests/` | Closed-form geometry, AP, MOT, TTC and synthetic-road lane cases; 168 tests |
 | `eval/eval_box_quality.py` | Detector box vs label box, per object — the D-018 harness |
 | `legacy/` | The v1 demo, archived. **Not a baseline** — see below |
 

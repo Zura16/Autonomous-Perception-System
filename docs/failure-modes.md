@@ -164,9 +164,49 @@ ever fixed, pitch becomes the next binding constraint**, and the sensitivity
 curve in Row 3.4 is what says so.
 
 ## Tracking (Phase 4) — not yet characterised
-## Lane detection (Phase 6) — not yet characterised
+## Lane detection (Phase 6)
 
-The charter names the expected set: shadows, faded markings, night, rain, sharp
-curves, construction. Naming them is not characterising them; frames are required.
+Images: `docs/figures/lanes/` — green = labelled lane, red = estimate (nominal
+geometry). Scored on 95 KITTI road-benchmark frames ([D-023](decisions.md)).
+
+### FM-13 · Lane straddling: the metric charges a lane width for a convention · **CONFIRMED**
+
+![um_000010](figures/lanes/um_000010.jpg)
+
+**Frames:** `um_000010`, `um_000045` — the only two where the camera centreline is
+outside the labelled ego lane. **Offset error ~4 m each, departure warning
+correct in both.** The estimator's nearer boundary is the line being crossed; it
+reports the lane the centreline is in, the label reports the lane being entered.
+Offset MAE is 0.26 m with these frames and 0.18 m without.
+
+### FM-14 · A boundary lost entirely beside the vehicle · **CONFIRMED**
+
+![um_000044](figures/lanes/um_000044.jpg)
+
+**Frames:** `um_000004` (right boundary beside parked cars), `um_000044` (vehicle
+on the left line, which shows almost no marking response — coverage 0.04).
+**Both are body-over-line departure frames, and both warnings were missed** — the
+two misses among the five that matter.
+
+### FM-15 · A marking inside a widening lane taken as a boundary · **CONFIRMED**
+
+![um_000005](figures/lanes/um_000005.jpg)
+
+**Frame:** `um_000005`. The labelled lane widens to 5.0 m; a marking inside it is
+taken as the right boundary. Offset error 1.15 m and a **false departure
+warning**.
+
+### FM-16 · Threshold grazing makes a per-frame warning a coin flip · **CONFIRMED**
+
+8 of 13 warning-rule frames clear the 1.11 m threshold by 0.01–0.09 m, against
+~0.18 m lateral error. Their warnings are 2/8 caught. Not a detector failure — a
+property of scoring a noisy estimate against a hard threshold.
+
+### Not yet inspected
+
+`um_000084`, `um_000043`, `um_000016` (offset errors 0.69–0.80 m) are rendered but
+their causes have not been examined. Expected conditions not present in this
+urban daytime set at all — night, rain, heavy shadow, construction, sharp
+curves — remain **uncharacterised**, and naming them is not characterising them.
 
 ## FCW (Phase 7) — not yet characterised

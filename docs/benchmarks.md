@@ -787,6 +787,94 @@ this favours deciding on TTC and reporting closing speed as context.
 
 ---
 
+## Phase 6 — Lane detection + departure metric
+
+**Labelled set:** KITTI road benchmark, 95 `um_lane` frames — human-labelled
+ego-lane masks from the same camera rig, each with a per-frame camera-to-road
+fit. KITTI raw has no lane labels ([D-023](decisions.md)). Urban, daytime, single
+frames; small N.
+
+**Solver:** metric bird's-eye warp (0.05 m grid) → horizontal morphological
+top-hat on lightness → sliding windows → quadratic x(z) in metres. **Parameters in
+`configs/lanes.yaml` were committed (`27904fe`) before this set was first
+evaluated.** Harness: `eval/eval_lane.py`.
+
+**Geometry:** `nominal` = level camera at 1.655 m (Phase 3, measured on raw
+drives, what a deployed system has); `oracle` = each frame's shipped road fit.
+Ground truth always uses the per-frame fit. Sanity check before any estimator
+ran: ground-truth lane width median **3.45 m** (p5 2.47, p95 4.16).
+
+### Row 6.1 — Detection and lateral offset
+
+| | nominal | oracle |
+|---|---|---|
+| both boundaries detected | **93/95 (97.9%)** | 90/95 (94.7%) |
+| lane-centre offset MAE, all detected | 0.26 m | 0.20 m |
+| **offset MAE excluding 2 straddling frames** | **0.18 m** (median 0.12, p90 0.39) | 0.16 m (median 0.07, p90 0.40) |
+| width error | median **+0.17 m**, MAE 0.34 | median +0.18 m, MAE 0.39 |
+
+**The two straddling frames are identified from ground truth alone** — the camera
+centreline lies *outside* the labelled ego lane (`um_000010`, `um_000045`) — not
+from estimator error, so reporting without them is not cherry-picking; both
+figures are shown. In both, the estimator's nearer boundary *is* the line being
+crossed (within 0.34 m) and the departure warning fires correctly. The ~4 m
+"offset error" is a **lane-identity disagreement**: once the car is over the
+line, which lane is "ego" is a labelling convention, and the offset metric
+charges a full lane width for it.
+
+**The width bias was predicted before running.** The solver finds marking
+*centres*; the labels mark the lane *edge*. A 0.12 m marking predicts +0.12 m,
+a 0.25 m edge line +0.25 m. Measured +0.17 m — and identical under nominal and
+oracle geometry, so it is the labelling convention, not the camera model.
+
+### Row 6.2 — Boundary position error by distance ahead
+
+| band (m) | nominal MAE | nominal median | oracle MAE | oracle median |
+|---|---|---|---|---|
+| 7–12 | 0.29 | +0.08 | 0.25 | −0.01 |
+| 12–20 | 0.38 | +0.13 | 0.33 | −0.00 |
+| 20–30 | 0.37 | +0.19 | 0.36 | −0.01 |
+| 30–40 | 0.43 | **+0.26** | 0.40 | −0.06 |
+
+**The fixed nominal geometry introduces a lateral bias that grows with distance**
+(+0.08 → +0.26 m); the per-frame fit removes it. Spread is almost the same under
+both, so the nominal camera costs *bias*, and marking detection costs *spread*.
+
+### Row 6.3 — Departure warning, scored per frame
+
+Warning rule: clearance from the vehicle centreline to the nearer boundary, 7 m
+ahead, below half-width 0.91 m + margin 0.20 m = 1.11 m.
+
+| ground-truth condition | frames | nominal warns | oracle warns |
+|---|---|---|---|
+| **vehicle body over a line** (clearance < 0.91 m) | **5** | **3/5** (95% CI 23–88%) | 2/5 (12–77%) |
+| grazing the threshold (0.91–1.11 m) | 8 | 2/8 | 1/8 |
+| clear of the threshold | 82 | **2 false (2.4%)** | 3 false (3.7%) |
+
+**13 frames meet the warning rule, but 8 of them clear it by 0.01–0.09 m**
+(clearances 1.02–1.10 m). With lateral MAE ~0.18 m, whether a threshold-grazing
+frame warns is close to a coin flip. So a per-frame hit rate at a hard
+threshold mostly measures how close frames sit to that threshold, not whether
+departures are detected. The meaningful rows are the first and last: **3 of 5
+body-over-line frames caught, 2.4% false warnings on clear frames** — a
+confidence interval of 23–88% says N=5 decides very little.
+
+The two missed body-over-line frames (`um_000004`, `um_000044`) both lost one
+boundary entirely (Row 6.4), not its position.
+
+### Row 6.4 — Failure set (worst 8 nominal frames, `docs/figures/lanes/`)
+
+| frame | outcome | cause (inspected) |
+|---|---|---|
+| `um_000010` | offset err 4.04 m, warning correct | straddling the dashed line; estimator's lane is the one the centreline is in |
+| `um_000045` | offset err 3.82 m, warning correct | same, beside tram tracks |
+| `um_000004` | missed | residential street, right boundary beside parked cars not found |
+| `um_000044` | missed | vehicle on the left line; that line has almost no marking response (coverage 0.04) |
+| `um_000005` | offset err 1.15 m, false warning | lane widens (5.0 m labelled); a marking inside the lane taken as the right boundary |
+| `um_000084`, `um_000043`, `um_000016` | offset err 0.69–0.80 m | rendered, **not yet inspected** |
+
+---
+
 ## Pending — nothing measured yet
 
 These rows are deliberately empty. A value here that is not a measurement is the
@@ -794,6 +882,5 @@ failure mode this file exists to prevent.
 
 | Row | Blocks on |
 |---|---|
-| 6.x — Lane departure detection rate / FP rate | Phase 6 |
 | 7.x — FCW TPR and **FP per hour** at a named TTC threshold | Phase 7 |
 | 8.x — End-to-end latency p50/p95/p99 vs budget | Phase 8 |

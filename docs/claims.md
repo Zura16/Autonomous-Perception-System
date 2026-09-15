@@ -39,6 +39,9 @@ row is a failure, not a warning.
 | C-19 | "Measured that without a deadband 54% of stationary objects report a phantom closing speed, and predicted that rate from a measured detector noise model to within a tenth of a point." | [Row 5.1–5.2](benchmarks.md) | *pending* | val. The prediction holds for none/fixed deadbands; sigma's real rate is 13× its synthetic one. |
 | C-20 | "Showed an adaptive (n-sigma) deadband's apparent TTC accuracy gain was selection bias: it goes silent on 10% of imminent-threat frames." | [Row 5.4](benchmarks.md) | *pending* | val, GT TTC < 3 s. |
 
+| C-21 | "Built a metric bird's-eye lane solver scored on 95 human-labelled KITTI road frames with parameters frozen before evaluation: 97.9% detection, 0.18 m lateral offset error." | [Row 6.1](benchmarks.md) | *pending* | Urban daytime single frames, N=95. 0.18 m excludes 2 straddling frames identified from ground truth; 0.26 m including them. |
+| C-22 | "Showed per-frame lane-departure hit rates at a hard threshold are dominated by threshold-grazing frames, and reported departure detection by ground-truth condition instead." | [Row 6.3](benchmarks.md) | *pending* | 3/5 body-over-line, 95% CI 23–88% — too few to claim a rate. |
+
 Commit hashes are filled in by `/claim-check` once the measurement and the claim
 are in the same committed state.
 
@@ -56,7 +59,9 @@ Kept here because the tempting overstatement is more dangerous than the gap.
 | "Accurate to ±X m" (single figure) | Forbidden by hard rule 2 — error must be binned by range. |
 | Any tracking number "vs KITTI leaderboard" | Raw tracklets AND self-implemented metrics ([D-004](decisions.md), [D-021](decisions.md)). Two independent reasons. |
 | "Implemented SORT" without the ablation | The shipped tracker deliberately discards SORT's output smoothing; saying "SORT" alone misstates what was built and drops the finding. |
-| Anything about FCW, warnings, or braking decisions | Not built. Phase 7. TTC exists; no decision layer consumes it yet. |
+| Anything about FCW, forward-collision warnings, or braking decisions | Not built. Phase 7. |
+| "Lane departure warning with X% detection rate" | 5 real departure frames. The interval is 23–88%; a single rate would be fiction. |
+| Lane performance in night, rain, construction, curves | Not in the labelled set. Uncharacterised. |
 | "Accurate closing speed" | TTC is accurate; closing speed inherits range error (78% relative at 30–50 m). Say which one. |
 | "The sigma deadband is more accurate" | It is not — identical TTC on a common subset. It emits fewer TTCs. |
 | Per-class detection mAP (Car vs Van vs Truck) | Not recoverable from a COCO-trained model; the number would measure the mapping ([D-014](decisions.md)). |
