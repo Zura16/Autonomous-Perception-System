@@ -1,0 +1,58 @@
+# Phase 6 lane solver. Every value below was FROZEN BEFORE the labelled set was
+# evaluated (docs/decisions.md D-023). They are physical defaults, not fits:
+# changing any of them after seeing results would be tuning on the evaluation set,
+# and must be logged as such with the before/after numbers.
+
+geometry:
+  # The Phase 3 nominal, measured by LiDAR road-plane fits on the RAW val drives
+  # -- independent of the road benchmark. The benchmark's own per-frame fits put
+  # its camera at a median 1.614 m, so a ~2.5% scale mismatch is expected and is
+  # exactly what the nominal-vs-oracle comparison measures.
+  camera_height_m: 1.655
+
+bev:
+  # Metric bird's-eye grid on the road plane. x lateral (left negative), z forward.
+  x_min_m: -8.0
+  x_max_m: 8.0
+  z_min_m: 6.0     # nearer than ~6 m the road leaves the bottom of the image
+  z_max_m: 40.0
+  resolution_m: 0.05
+
+markings:
+  # German/EU lane markings are 0.12 m wide (0.25 m for some edge lines). A
+  # top-hat element several times wider keeps the stripe and removes broad
+  # structure. 0.6 m is 5x a standard marking and still narrower than a lane.
+  tophat_width_m: 0.6
+  # Grey-level rise a marking must show above its local surroundings. Painted
+  # lines on asphalt are typically 40+ levels brighter; 25 admits worn paint
+  # without admitting texture. A default, not a fit.
+  tophat_contrast: 25
+
+search:
+  # Where a boundary's base may sit relative to the camera centreline. A lane is
+  # ~3-3.75 m wide, so each boundary is expected 1.5-1.9 m out; the band is wide
+  # enough for a car well off-centre and narrow enough to skip the next lane.
+  base_min_m: 0.4
+  base_max_m: 2.8
+  base_min_pixels: 15
+  n_windows: 12
+  window_half_width_m: 0.5
+  window_min_pixels: 8
+
+fit:
+  min_points: 40
+  min_span_m: 6.0   # a quadratic over less than 6 m of road is extrapolation
+
+metric:
+  # Offset and width are read over this forward band. Near enough to be what a
+  # departure warning acts on; far enough to be inside the labelled region (the
+  # labels start at a median 6.4 m ahead).
+  lookahead_min_m: 7.0
+  lookahead_max_m: 12.0
+
+departure:
+  # Half the width of the KITTI recording vehicle (VW Passat B6, 1.82 m).
+  vehicle_half_width_m: 0.91
+  # Warn when the vehicle's edge is within this of a boundary, at the near end
+  # of the lookahead.
+  margin_m: 0.20
