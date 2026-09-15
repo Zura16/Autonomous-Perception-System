@@ -1097,8 +1097,14 @@ In the order tried, each checked against data before being written down:
 data looked like a geometry bug. Evaluate a fit only where it has support —
 `Boundary.covers()` exists, and the harness uses it; the ad-hoc diagnostic did not.
 
-**Open.** Three failure-set frames (`um_000084`, `um_000043`, `um_000016`) are
-rendered but not inspected. A lane-identity-aware offset metric (score against
+**Inspected afterwards (same day).** The three remaining failure frames share one
+design cause: the base search takes the *strongest* stripe in a 0.4–2.8 m band,
+so a dashed ego boundary or a visible but weaker edge loses to a solid line, road
+edge or shadow edge further out (FM-17). The boundaries were visible (coverage
+0.50–1.00). The fix — nearest sufficient peak — is **identified and deliberately
+not applied**, since it would be tuned on the only labelled lane set.
+
+**Open. A lane-identity-aware offset metric (score against
 whichever adjacent lane the estimate chose) would separate identity from
 localisation cleanly; not built. Any parameter change now needs a new labelled
 set to be credible.

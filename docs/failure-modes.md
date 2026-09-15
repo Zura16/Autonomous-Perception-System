@@ -202,11 +202,32 @@ warning**.
 ~0.18 m lateral error. Their warnings are 2/8 caught. Not a detector failure — a
 property of scoring a noisy estimate against a hard threshold.
 
-### Not yet inspected
+### FM-17 · The strongest stripe wins over the nearest boundary · **CONFIRMED**
 
-`um_000084`, `um_000043`, `um_000016` (offset errors 0.69–0.80 m) are rendered but
-their causes have not been examined. Expected conditions not present in this
-urban daytime set at all — night, rain, heavy shadow, construction, sharp
-curves — remain **uncharacterised**, and naming them is not characterising them.
+![um_000084](figures/lanes/um_000084.jpg)
+
+**Frames:** `um_000084`, `um_000016` (dashed ego boundary skipped for the next
+solid line out), `um_000043` (a fully visible boundary skipped for a shadowed
+verge edge). Estimated lane width inflates to 4.2–5.9 m against 3.2–3.6 m
+labelled.
+
+**Mechanism:** each boundary's base is the argmax of marking pixels over a
+0.4–2.8 m band. A dashed line contributes about a third of the pixels of a
+continuous line or a long shadow edge, so the strongest candidate in the band
+beats the nearer, correct one. The skipped boundaries were visible (coverage
+0.50–1.00, against a p10 of 0.54 over all 190 labelled edges).
+
+**Fix identified, not applied:** choose the nearest peak above a minimum rather
+than the strongest. Applying it now would be tuning on the only labelled lane set
+([D-023](decisions.md)); it needs new labelled data to be evaluated credibly.
+
+*Correction to the first visual read:* `um_000043` was initially described as an
+unmarked edge. Its labelled right edge has full marking coverage (1.00).
+
+### Not characterised
+
+Conditions absent from this urban daytime set — night, rain, heavy shadow,
+construction, sharp curves — remain **uncharacterised**, and naming them is not
+characterising them.
 
 ## FCW (Phase 7) — not yet characterised

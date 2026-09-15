@@ -871,7 +871,16 @@ boundary entirely (Row 6.4), not its position.
 | `um_000004` | missed | residential street, right boundary beside parked cars not found |
 | `um_000044` | missed | vehicle on the left line; that line has almost no marking response (coverage 0.04) |
 | `um_000005` | offset err 1.15 m, false warning | lane widens (5.0 m labelled); a marking inside the lane taken as the right boundary |
-| `um_000084`, `um_000043`, `um_000016` | offset err 0.69–0.80 m | rendered, **not yet inspected** |
+| `um_000084` | offset err 0.80 m, width 3.63 → 5.86 m | dashed left boundary (coverage 0.65) passed over for the solid road edge 1.7 m further out |
+| `um_000016` | offset err 0.69 m, width 3.23 → 4.58 m | dashed right boundary (coverage 0.50) passed over for the next solid line |
+| `um_000043` | offset err 0.77 m, width 3.39 → 4.19 m | fully visible right boundary (coverage 1.00) passed over for a shadowed verge edge further out |
+
+**All three share one design cause** (FM-17): each boundary's base is the column
+with the most marking pixels anywhere in a 0.4–2.8 m band, so the *strongest*
+stripe wins over the *nearest*. A dashed line puts down about a third of the
+pixels of a solid line or a long shadow edge. The skipped boundaries were not
+invisible — their coverage (0.50–1.00) is at or above the p10 of all 190
+labelled edges (0.54).
 
 ---
 
