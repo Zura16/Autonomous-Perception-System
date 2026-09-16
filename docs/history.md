@@ -479,3 +479,46 @@ did; an ad-hoc diagnostic did not.
 
 **Next:** Phase 7 — the FCW / AEB-request decision layer, evaluated as a detector
 with TPR and FP/hour, consuming Phase 5's TTC.
+
+---
+
+## 2026-09-15 (cont.) — Phase 7: the metric that could not be produced
+
+Built the decision layer (`aps/fcw.py`): warn on an in-path, closing object whose
+TTC stays below a threshold for k of the last n frames; request AEB below a
+stricter threshold. Pure logic, 16 tests. The harness collects perception once
+and replays every decision configuration over identical rows.
+
+Two design constraints were set before any result existed: exposure is minutes,
+so false alarms get exact Poisson intervals rather than a bare per-hour figure;
+and choosing an operating point on val makes val a selection set, so the unbiased
+number would have to come from the held-out test drives.
+
+**Neither constraint ended up mattering, because the data has no threats.** Val
+holds **2 in-path threat events** below a 2 s TTC — 11 frames out of 8383
+annotated samples — across 21 distinct in-path closing objects, with a minimum
+in-path TTC of **1.17 s** over 2.72 minutes. Hard rule 7's TPR and FP/hour are
+not producible, and that is Phase 7's result ([D-024](decisions.md)).
+
+**Checked my own framing before publishing it.** The obvious objection is that
+the ±1.5 m straight corridor is too narrow. Widening it produces events — 2 → 8
+→ 84 as the half-width goes 1.5 → 2.5 → 5.0 m — but a 5 m half-corridor spans
+oncoming and adjacent lanes, which an FCW must not warn about. So the threat
+count is governed by the in-path definition rather than the data, and a TPR would
+describe the corridor.
+
+**What the sweep does show:** persistence cuts onsets 13 → 3 and false alarms
+12 → 2 at a 0.2 s latency cost; half of all false alarms are ghost tracks with no
+annotated object behind them; and the Phase 5 `sigma` deadband catches 0 of 2
+events against 1 of 2 with no deadband — the suppression D-022 predicted, landing
+on the threats.
+
+Also moved ground-truth kinematics out of `eval_ttc.py` into `aps/groundtruth.py`
+so Phase 5 and Phase 7 score against one definition, and verified the refactor
+against the saved Phase 5 artifact before using it.
+
+**Landed:** `aps/fcw.py`, `configs/fcw.yaml`, `eval/eval_fcw.py`, 16 tests
+(184 total).
+
+**Next:** Phase 8 — HUD and top-down view, which presents results that already
+exist, then Phase 9's writeup.

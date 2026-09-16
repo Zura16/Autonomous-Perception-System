@@ -230,4 +230,27 @@ Conditions absent from this urban daytime set — night, rain, heavy shadow,
 construction, sharp curves — remain **uncharacterised**, and naming them is not
 characterising them.
 
-## FCW (Phase 7) — not yet characterised
+## FCW (Phase 7)
+
+### FM-18 · Half of all false alarms are ghost tracks · **CONFIRMED**
+
+At TTC 2.0 s, no deadband, no persistence: 36 candidate frames, of which **18 sit
+on tracks matching no annotated object at all**. The decision layer cannot be
+more precise than the detector feeding it — the mirror of Row 4.4, where MOTA was
+bounded by detector recall.
+
+### FM-19 · The confidence deadband can suppress the threat itself · **CONFIRMED**
+
+At TTC 2.0 s with the `sigma` deadband and no persistence, **0 of 2** threat
+events are caught, against 1 of 2 with no deadband. [D-022](decisions.md)
+measured that this deadband withholds the frames whose TTC is hardest to
+estimate; threats are hard frames. The suppression is visible here on 2 events —
+too few to size, enough to confirm the direction.
+
+### FM-20 · The evaluation itself fails: no threats to measure · **CONFIRMED**
+
+2.72 minutes of val contain **2 threat events** below a 2 s TTC and a minimum
+in-path TTC of 1.17 s. Widening the corridor to manufacture events instead counts
+adjacent and oncoming traffic. Neither TPR nor FP/hour is publishable
+([D-024](decisions.md)). Recorded as a failure mode of the *measurement*, which
+is where it belongs.

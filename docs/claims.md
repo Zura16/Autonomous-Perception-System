@@ -42,6 +42,9 @@ row is a failure, not a warning.
 | C-21 | "Built a metric bird's-eye lane solver scored on 95 human-labelled KITTI road frames with parameters frozen before evaluation: 97.9% detection, 0.18 m lateral offset error." | [Row 6.1](benchmarks.md) | *pending* | Urban daytime single frames, N=95. 0.18 m excludes 2 straddling frames identified from ground truth; 0.26 m including them. |
 | C-22 | "Showed per-frame lane-departure hit rates at a hard threshold are dominated by threshold-grazing frames, and reported departure detection by ground-truth condition instead." | [Row 6.3](benchmarks.md) | *pending* | 3/5 body-over-line, 95% CI 23–88% — too few to claim a rate. |
 
+| C-23 | "Built and swept a monocular forward-collision-warning layer, and established that the dataset cannot validate it: 2 in-path threat events below a 2 s TTC in 2.7 minutes of driving." | [Row 7.1–7.2](benchmarks.md) | *pending* | val. No TPR or FP/hour published; no operating point selected. |
+| C-24 | "Measured that warning persistence cuts false alarms six-fold for 0.2 s of latency, and that half of all false alarms are detector ghosts rather than decision errors." | [Row 7.3–7.4](benchmarks.md) | *pending* | val, 2 events — direction is legible, magnitude is not. |
+
 Commit hashes are filled in by `/claim-check` once the measurement and the claim
 are in the same committed state.
 
@@ -59,7 +62,8 @@ Kept here because the tempting overstatement is more dangerous than the gap.
 | "Accurate to ±X m" (single figure) | Forbidden by hard rule 2 — error must be binned by range. |
 | Any tracking number "vs KITTI leaderboard" | Raw tracklets AND self-implemented metrics ([D-004](decisions.md), [D-021](decisions.md)). Two independent reasons. |
 | "Implemented SORT" without the ablation | The shipped tracker deliberately discards SORT's output smoothing; saying "SORT" alone misstates what was built and drops the finding. |
-| Anything about FCW, forward-collision warnings, or braking decisions | Not built. Phase 7. |
+| An FCW detection rate or false-alarms-per-hour figure | **Deliberately not produced** — 2 threat events, 0.045 h exposure ([D-024](decisions.md)). Quoting one would be fitting noise. |
+| "Tuned the FCW operating point" | No operating point was selected; the sweep is published, the choice is not made. |
 | "Lane departure warning with X% detection rate" | 5 real departure frames. The interval is 23–88%; a single rate would be fiction. |
 | Lane performance in night, rain, construction, curves | Not in the labelled set. Uncharacterised. |
 | "Accurate closing speed" | TTC is accurate; closing speed inherits range error (78% relative at 30–50 m). Say which one. |

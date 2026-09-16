@@ -1118,6 +1118,65 @@ honest departure result is 3 of 5 body-over-line frames with a 23–88% interval
 
 ---
 
+## D-024 · FCW rates cannot be validated on this data, and no operating point is chosen · 2026-09-15 · Active
+
+**Decision.** Phase 7 ships the decision layer and its harness but **declines to
+publish a TPR or an FP/hour figure as a result**, and **does not select an
+operating point**. `configs/fcw.yaml` keeps its starting values.
+
+**Why.** Hard rule 7 demands TPR *and* FP/hour at a named TTC threshold. Val
+provides:
+
+- **0.0454 h of exposure** (163 s), so one false alarm is 22/hour and the exact
+  Poisson interval at 12 false alarms is 137–462/hour;
+- **2 threat events** at TTC < 2 s (11 frames of 8383), over 21 distinct in-path
+  closing objects, with a **minimum in-path TTC of 1.17 s** across the entire
+  split.
+
+A rate over two events is not a rate. Ordinary city driving contains almost no
+imminent forward-collision situations, which is what one would hope of the
+drivers and is fatal to this measurement.
+
+**The corridor makes it worse, not better.** Threat count is dominated by the
+in-path definition: 2 events at a ±1.5 m corridor, 8 at 2.5 m, 84 at 5.0 m. But
+a 3.5–5 m half-corridor spans adjacent and oncoming lanes, which an FCW must not
+warn about — those "threats" are exactly the alarms a real system is judged for
+suppressing. Narrow leaves nothing to measure; wide measures the wrong thing.
+**Any TPR here would characterise the corridor definition more than the detector.**
+
+**What IS reported** (Rows 7.3–7.4), with its sample size attached:
+
+- persistence is the strongest lever — 3-of-3 cuts onsets 13 → 3 and false
+  alarms 12 → 2 at 2.0 s while keeping the one caught event, costing 0.2 s of
+  latency;
+- the Phase 5 `sigma` deadband can lose the event entirely (0 of 2 at 2.0 s),
+  consistent with [D-022](#d-022): it withholds the hardest frames, and threats
+  are hard frames;
+- **half of all false alarms are ghost tracks** with no annotated object behind
+  them (18 of 36 candidate frames). Decision precision is bounded by detector
+  precision, as MOTA was bounded by detector recall.
+
+**What would be needed.** Either staged scenarios in the Euro NCAP style (a
+target vehicle approached deliberately, tens of runs), or hours of naturalistic
+driving with harsh-braking events mined out. Both are out of scope here; the gap
+is stated rather than papered over with a number from two events. **The held-out
+test split will not fix this** — it is 744 frames, 1.3 minutes, smaller still.
+
+**Why the operating point stays unchosen.** Selecting a threshold on two events
+would be fitting noise, and every subsequent figure would inherit it. The sweep
+is published so the shape of the trade is visible; the choice waits for data that
+can support it.
+
+**Interview version.** "The FCW layer is built and swept, but I don't publish a
+detection rate for it. Val is 2.7 minutes of driving containing two in-path
+threat events under a 2-second TTC, and the minimum TTC anywhere is 1.17 s — you
+cannot get a true-positive rate or a false-alarm-per-hour figure out of that. What
+I can show is that persistence cuts false alarms six-fold for 0.2 s of latency,
+and that half the remaining false alarms are detector ghosts rather than decision
+errors."
+
+---
+
 ## Open questions
 
 | Question | Blocks | Notes |

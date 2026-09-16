@@ -884,6 +884,89 @@ labelled edges (0.54).
 
 ---
 
+## Phase 7 — FCW / AEB request, evaluated as a detector
+
+Pipeline as shipped: YOLOv8n → `sort_det` → scale-rate TTC → decision layer
+(`aps/fcw.py`). Perception runs once; every decision configuration replays the
+same rows (`eval/eval_fcw.py`). Ground-truth threats come from the annotations
+alone, so objects the detector never found stay in the denominator.
+
+**Exposure: 1448 frames = 163.4 s = 2.72 minutes = 0.0454 h.**
+
+### Row 7.1 — The headline is that the data cannot support the metric
+
+Annotated samples on val: 8383. In-path (|lateral| < 1.5 m): 1016. In-path **and
+closing**: 648, over **21 distinct objects**. Threat frames and events:
+
+| GT TTC below | threat frames | threat events |
+|---|---|---|
+| 1.5 s | **4** | 1 |
+| 2.0 s | **11** | **2** |
+| 2.5 s | 14 | 2 |
+| 3.0 s | 18 | 5 |
+
+**The minimum TTC anywhere in-path across the whole split is 1.17 s**, and the
+closest in-path object is 5.9 m away. Drivers keep gaps; 2.7 minutes of ordinary
+city driving contains almost no imminent forward-collision situations.
+
+A true-positive rate over **2 events** is not a rate, and FP/hour from 0.045 h of
+exposure carries an interval spanning an order of magnitude. **Hard rule 7's
+metric cannot be honestly produced on this data**, and that is the Phase 7
+result ([D-024](decisions.md)).
+
+### Row 7.2 — Threat count is governed by the corridor definition, not the data
+
+| corridor half-width | in-path frames | TTC < 2 s frames | events @ 2 s |
+|---|---|---|---|
+| **1.5 m** (ego lane) | 1016 | **11** | **2** |
+| 2.0 m | 1097 | 15 | 2 |
+| 2.5 m | 1375 | 65 | 8 |
+| 3.5 m | 2540 | 608 | 49 |
+| 5.0 m | 4158 | 1206 | 84 |
+
+Widening the corridor manufactures events, but a 3.5–5 m half-corridor spans the
+adjacent and oncoming lanes — traffic an FCW must **not** warn about. So a narrow
+corridor leaves nothing to measure and a wide one counts non-threats. **Any TPR
+quoted here would describe the in-path definition more than the detector.**
+
+### Row 7.3 — Decision-layer behaviour on the events that do exist
+
+Selected on val, therefore optimistic; N is tiny. Exact Poisson intervals.
+
+| TTC thr | deadband | k/n | events | caught | onsets | FP | FP/h | FP/h 95% CI | lead TTC |
+|---|---|---|---|---|---|---|---|---|---|
+| 2.0 | none | 1/1 | 2 | 1 | 13 | 12 | 264 | 137–462 | 1.70 s |
+| 2.0 | none | 2/3 | 2 | 1 | 8 | 7 | 154 | 62–318 | 2.03 s |
+| 2.0 | none | 3/3 | 2 | 1 | 3 | **2** | 44 | 5–159 | 1.92 s |
+| 2.0 | sigma | 1/1 | 2 | **0** | 7 | 7 | 154 | 62–318 | — |
+| 3.0 | none | 1/1 | 5 | 1 | 20 | 17 | 375 | 218–600 | 1.70 s |
+| 3.0 | none | 3/3 | 5 | 2 | 8 | 5 | 110 | 36–257 | 2.41 s |
+
+What is legible despite the sample size:
+
+- **Persistence is the strongest lever.** At 2.0 s, 3-of-3 cuts onsets 13 → 3 and
+  false positives 12 → 2 while keeping the same event caught, at a cost of
+  0.2 s of warning latency.
+- **The Phase 5 deadband barely matters here, and `sigma` can lose the event**
+  (0 of 2 caught at 2.0 s, 1-of-1), consistent with D-022: it withholds the
+  hardest frames, which are the threats.
+- **Lead time is 1.7–2.5 s** where a warning fires.
+
+### Row 7.4 — What the false alarms are
+
+At 2.0 s / no deadband / 1-of-1: 36 candidate frames, split evenly —
+
+| source | frames |
+|---|---|
+| track matched an annotated object (wrong TTC or wrong lateral) | 18 |
+| **track matched no annotated object at all** (ghost) | 18 |
+
+Half the false alarms are not decision errors at all: they are tracks on things
+that are not annotated objects. Precision at the decision layer is bounded by
+detector precision, exactly as MOTA was bounded by detector recall (Row 4.4).
+
+---
+
 ## Pending — nothing measured yet
 
 These rows are deliberately empty. A value here that is not a measurement is the
@@ -891,5 +974,4 @@ failure mode this file exists to prevent.
 
 | Row | Blocks on |
 |---|---|
-| 7.x — FCW TPR and **FP per hour** at a named TTC threshold | Phase 7 |
 | 8.x — End-to-end latency p50/p95/p99 vs budget | Phase 8 |

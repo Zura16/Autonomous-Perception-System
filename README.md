@@ -23,7 +23,7 @@ to be able to say exactly why, with numbers.
 
 ## Status
 
-**Phases 0–6 of 9 complete**, including the headline artifact: the monocular
+**Phases 0–7 of 9 complete**, including the headline artifact: the monocular
 error-vs-range curve, graded by a LiDAR ruler whose own error was characterised
 first. That ordering is deliberate — an estimator with no ground truth is a
 decoration.
@@ -37,7 +37,7 @@ decoration.
 | 4 | **Tracking**: IoU → SORT, MOTA/IDF1/ID-switches | ✅ |
 | 5 | **Closing speed + TTC** (scale-rate + KF) | ✅ |
 | 6 | **Lane detection + departure metric** | ✅ |
-| 7 | FCW decision layer: TPR **and FP/hour** | — |
+| 7 | **FCW decision layer**: TPR **and FP/hour** | ✅ |
 | 8 | HUD + top-down view *(deliberately last)* | — |
 | 9 | Writeup | — |
 
@@ -282,6 +282,42 @@ The failure set is in [docs/failure-modes.md](docs/failure-modes.md) with images
 Night, rain, construction and sharp curves are not in this set at all and remain
 uncharacterised.
 
+## What Phase 7 established — a metric that cannot be produced
+
+The collision-warning layer is built, tested and swept. **Its headline result is
+that this dataset cannot measure it**, and that is reported instead of a number.
+
+| val | |
+|---|---|
+| exposure | **2.72 minutes** (0.045 h) |
+| in-path threat events below a 2 s TTC | **2** (11 frames of 8383 annotated) |
+| minimum time-to-collision anywhere in-path | **1.17 s** |
+| false alarms, loosest setting | 12 → 264/h, 95% interval **137–462/h** |
+
+Ordinary city driving contains almost no imminent collisions — drivers keep gaps.
+A detection rate over two events is not a rate, and a per-hour false-alarm figure
+from 2.7 minutes carries an interval spanning an order of magnitude. So **no
+detection rate, no false-alarms-per-hour, and no operating threshold are
+published.**
+
+Widening the "in path" corridor does manufacture events — 2 at ±1.5 m, 84 at
+±5 m — but a 5 m corridor includes oncoming and adjacent-lane traffic, precisely
+what a collision warning must stay silent about. Narrow leaves nothing to
+measure; wide measures the wrong thing.
+
+**What the sweep does show,** with its sample size attached:
+
+- **Persistence is the strongest lever.** Requiring 3 agreeing frames instead of
+  1 cuts warnings from 13 to 3 and false alarms from 12 to 2, while still
+  catching the same event, at the cost of 0.2 s of warning latency.
+- **Half of all false alarms are ghost tracks** — objects the detector invented.
+  The decision layer can be no more precise than the detector feeding it.
+- **The confidence filter from Phase 5 can suppress the threat itself**, catching
+  0 of 2 events instead of 1 of 2, exactly as its earlier measurement predicted.
+
+Closing this honestly needs staged test scenarios or hours of driving, not a
+number derived from two events.
+
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
 
@@ -313,6 +349,7 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `aps/motmetrics.py` | CLEAR MOT and IDF1, self-implemented |
 | `aps/motion.py` | Scale-rate TTC: Kalman filter over inverse box height, deadbands |
 | `aps/lanes.py` | Metric bird's-eye lane solver and ground-truth extraction |
+| `aps/fcw.py` | Collision-warning decision layer: corridor, persistence, AEB request |
 | `aps/kitti/road.py` | KITTI road benchmark loader: labelled lanes and per-frame road plane |
 | `aps/groundplane.py` | LiDAR road-plane fit — camera height and pitch, GT only |
 | `aps/matching.py` | IoU, greedy association, ignore regions, average precision |
@@ -321,7 +358,7 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `eval/` | Evaluation harnesses (detection; range/tracking/TTC to come) |
 | `configs/dataset.yaml` | The split. Changing it invalidates every benchmark row |
 | `docs/` | Benchmarks, decisions, error budget, glossary, history |
-| `tests/` | Closed-form geometry, AP, MOT, TTC and synthetic-road lane cases; 168 tests |
+| `tests/` | Closed-form geometry, AP, MOT, TTC, lane and decision-layer cases; 184 tests |
 | `eval/eval_box_quality.py` | Detector box vs label box, per object — the D-018 harness |
 | `legacy/` | The v1 demo, archived. **Not a baseline** — see below |
 

@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from aps.detect import Detections, Detector  # noqa: E402
 from aps.geometry import CameraModel, range_contact_point  # noqa: E402
+from aps.groundtruth import KINEMATICS_WINDOW, tracklet_kinematics  # noqa: E402
 from aps.kitti import Calibration, Tracklet, load_split, load_tracklets  # noqa: E402
 from aps.kitti.tracklets import FCW_CLASSES, boxes_by_frame  # noqa: E402
 from aps.matching import iou_matrix  # noqa: E402
@@ -44,8 +45,6 @@ from aps.tracking import make_tracker  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 DEADBANDS = ["none", "fixed", "sigma"]
-GT_WINDOW = 3  # frames either side for the ground-truth slope
-GT_MIN_POINTS = 5
 MATCH_IOU = 0.5
 STATIONARY_MPS = 0.5  # |GT closing speed| below this counts as relatively stationary
 CLOSING_MPS = -2.0  # GT closing speed below this counts as genuinely closing
@@ -54,26 +53,10 @@ BIN_LABELS = ["0-10", "10-20", "20-30", "30-50"]
 
 
 def gt_kinematics(tracklets: list[Tracklet], calib: Calibration, times_s: np.ndarray) -> dict:
-    """(track_id, frame) -> (range_m, closing_speed_mps) from annotated poses."""
-    ranges: dict[int, dict[int, float]] = defaultdict(dict)
-    for tr in tracklets:
-        if tr.object_type not in FCW_CLASSES:
-            continue
-        for b in tr.boxes:
-            if b.box_2d(calib) is not None:
-                ranges[tr.track_id][b.frame] = b.ranges_m(calib)[0]
-
-    out = {}
-    for tid, by_frame in ranges.items():
-        for f, r in by_frame.items():
-            window = [g for g in range(f - GT_WINDOW, f + GT_WINDOW + 1) if g in by_frame]
-            if len(window) < GT_MIN_POINTS:
-                continue
-            t = times_s[window]
-            d = np.array([by_frame[g] for g in window])
-            slope = np.polyfit(t - t.mean(), d, 1)[0]
-            out[(tid, f)] = (r, float(slope))
-    return out
+    """(track_id, frame) -> (range_m, closing_speed_mps). Thin adapter over the
+    shared definition in aps.groundtruth.tracklet_kinematics."""
+    kin = tracklet_kinematics(tracklets, calib, times_s, FCW_CLASSES)
+    return {k: (v.range_m, v.closing_speed_mps) for k, v in kin.items()}
 
 
 def run(split: str, detector: Detector, max_frames: int | None, conf: float) -> dict:
@@ -149,7 +132,9 @@ def report(d: dict, split: str) -> None:
     print(f"\n{'=' * 90}")
     print(f"PHASE 5 -- CLOSING SPEED + TTC -- split '{split}', {len(gt_r)} track-frames, "
           f"{int(has_gt.sum())} with ground truth")  # fmt: skip
-    print(f"GT closing speed = LSQ slope of annotated near-face range over +/-{GT_WINDOW} frames")
+    print(
+        f"GT closing speed = LSQ slope of annotated near-face range over +/-{KINEMATICS_WINDOW} frames"
+    )
     print("=" * 90)
 
     stationary = has_gt & mature & (np.abs(gt_v) < STATIONARY_MPS)

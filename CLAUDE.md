@@ -118,9 +118,10 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Tracking ablation | association **−29% ID switches**; Kalman smoothing of the OUTPUT costs MOTP 0.769→0.735 and is discarded ([D-021](docs/decisions.md)) |
 | **Lanes (95 labelled KITTI road frames, params frozen first)** | detection **97.9%** · offset MAE **0.18 m** excl. 2 straddling frames (0.26 m all) · width bias +0.17 m (predicted) |
 | Lane departure warning | body-over-line **3/5** (95% CI 23–88%) · false warnings **2/82 (2.4%)** · 8 of 13 rule frames graze the threshold ([D-023](docs/decisions.md)) |
-| FCW: TPR and **FP per hour**, at threshold TTC = TBD | TBD |
+| **FCW: TPR and FP/hour** | **NOT PUBLISHABLE on this data** — val holds **2 threat events** below TTC 2 s in **0.045 h** of exposure; min in-path TTC 1.17 s ([D-024](docs/decisions.md)) |
+| FCW decision layer, what is measured | persistence 3/3 cuts onsets 13→3 and false alarms 12→2 at TTC 2.0 s for 0.2 s latency · **half of false alarms are ghost tracks** · `sigma` deadband can suppress the threat |
 | Per-stage latency p50/p95/p99 | detection only so far — see above. Track/range/KF/decide not yet measured |
-| Test suite count | **168** |
+| Test suite count | **184** |
 
 ## Common commands (run from repo root)
 
@@ -167,7 +168,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - [x] **Phase 4 — Tracking.** ✅ IoU baseline vs SORT vs SORT-with-raw-output. Association buys −29% ID switches; canonical SORT's smoothing costs MOTP and is discarded ([D-021](docs/decisions.md)).
 - [x] **Phase 5 — Closing speed + TTC.** ✅ KF over `u = 1/h` (exact under constant velocity), measured noise model, TTC unbiased (MAE 0.41 s < 3 s). Deadband measured as a gate; operating point deferred to Phase 7 ([D-022](docs/decisions.md)).
 - [x] **Phase 6 — Lane detection + departure metric.** ✅ Metric BEV + top-hat + sliding windows on 95 labelled KITTI road frames, parameters frozen before evaluation. Offset MAE 0.18 m; failure set with frames ([D-023](docs/decisions.md)).
-- [ ] **Phase 7 — FCW / AEB-request decision layer.** Evaluated as a detector: TPR **and FP/hour**.
+- [x] **Phase 7 — FCW / AEB-request decision layer.** ✅ Built and swept. **TPR/FP-per-hour declined as unpublishable**: 2 threat events in 2.7 minutes ([D-024](docs/decisions.md)). No operating point selected.
 - [ ] **Phase 8 — HUD + top-down view.** Deliberately last. It presents results that already exist.
 - [ ] **Phase 9 — Writeup.** README leading with the error curve and the operating envelope; `claims.md` generated from `benchmarks.md`; failure modes published, not buried.
 
@@ -175,7 +176,10 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 6 COMPLETE** (2026-09-15). Phases 0–5 ✅. **Next: Phase 7 — FCW / AEB-request decision layer**, which consumes Phase 5's TTC and must set the deadband operating point against FP/hour.
+- **Phase:** **Phase 7 COMPLETE** (2026-09-15). Phases 0–6 ✅. **Next: Phase 8 — HUD + top-down view**, then Phase 9 writeup.
+- **⚠ PHASE 7'S RESULT IS THAT THE METRIC CANNOT BE PRODUCED ([D-024](docs/decisions.md)).** Val is **0.045 h** of exposure holding **2 threat events** below TTC 2 s (11 frames of 8383 annotated), over 21 in-path closing objects, minimum in-path TTC **1.17 s**. A TPR over 2 events is not a rate; 12 false alarms carry a 137–462/h interval. **No TPR, no FP/hour, and no operating point is published.** The held-out test split (1.3 min) is smaller still — this needs staged NCAP-style scenarios or hours of naturalistic driving.
+- **Threat count is set by the corridor definition, not the data**: 2 events at ±1.5 m, 8 at 2.5 m, 84 at 5.0 m — but a 5 m corridor counts oncoming traffic an FCW must *not* warn about.
+- **What Phase 7 does show:** persistence is the strongest lever (3/3 cuts onsets 13→3, false alarms 12→2, for 0.2 s latency); **half of all false alarms are ghost tracks** with no annotated object; the Phase 5 `sigma` deadband can suppress the threat itself (0 of 2 caught).
 - **Lanes ([D-023](docs/decisions.md)).** KITTI raw has no lane labels, so scored on the road benchmark's 95 `um_lane` frames; parameters committed before first evaluation (`27904fe`). Detection 97.9 %; offset MAE **0.18 m** excluding 2 lane-straddling frames (0.26 m with them); width bias +0.17 m, predicted beforehand from marking-centre vs lane-edge convention. Fixed nominal camera costs a distance-growing lateral bias (+0.08 → +0.26 m).
 - **Two ~4 m lane errors were lane-identity disagreements**: the car straddled the line, the solver found the line being crossed and warned correctly. **Departure warning: 3/5 body-over-line frames (CI 23–88 %), 2.4 % false warnings**; 8 of 13 rule frames graze the threshold by < 9 cm, so a per-frame hit rate there is a coin flip.
 - **TTC is the trustworthy output ([D-022](docs/decisions.md)).** Filter over `u = 1/h` (proportional to range, so exact under constant velocity). `TTC = −u/u̇` is calibration- and prior-free. On val at GT TTC < 3 s: **MAE 0.41 s, median +0.01 s** — unbiased, because the −4.5% box bias cancels in the ratio. Closing speed inherits range error (rel MAE 28 → 78 % by range).
@@ -184,7 +188,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - **THE HEADLINE (Phase 3, val, N=6122).** Range MAPE contact-point **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %**. **Credible envelope 10–30 m at ≤15% MAPE**; no bin reaches 10%. Curve is U-shaped — worst in the near field.
 - **Far-range range error explained ([D-020](docs/decisions.md)): road non-flatness.** Road falls ~10 cm below the assumed 1.655 m plane by 50 m; predicted from geometry with no free parameters, matches observation beyond 20 m to 0.1–0.6 m.
 - **⚠ STILL OPEN: a flat +0.7 m near-field range residual** inside 13 m, ~0.3 m vehicle-specific. Suspects untested: effective horizon row ≠ `cy` · `shrink_p20` on very large boxes · detector bottom-edge placement on close cars.
-- **Verified:** 168 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val); detection AP@0.5 **0.615**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
+- **Verified:** 184 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val); detection AP@0.5 **0.615**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
 - **Known issues:** dev has now pointed the wrong way **three times** (50+ ruler bin, box-bias class mean, tracker ordering) — **dev is for wiring, never conclusions** · tracking metrics self-implemented and raw-tracklet labels, so not leaderboard-comparable · 50+ bins thin throughout.
 - **Standing warning:** draft resume bullets describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo** are not this system. Claims get generated from `benchmarks.md` in Phase 9.
 

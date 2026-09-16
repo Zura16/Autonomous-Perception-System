@@ -1,0 +1,29 @@
+# Phase 7 forward-collision warning / AEB request.
+#
+# These are the STARTING values. The operating point is chosen by a sweep on val
+# (eval/eval_fcw.py), which makes val a selection set: the unbiased figure at the
+# chosen point comes from the held-out test drives in Phase 9 (D-024).
+
+thresholds:
+  # Euro NCAP's FCW assessment grades warnings issued around TTC 2.0-2.4 s; a
+  # warning must leave the driver ~1.2 s to react plus braking time. 2.0 s is the
+  # starting point. The Phase 5 TTC error at TTC < 3 s is MAE 0.41 s, p90 1.02 s,
+  # so a threshold is only meaningful to roughly half a second.
+  ttc_warning_s: 2.0
+  # AEB request: late and severe. Logged, never actuated.
+  ttc_aeb_s: 1.0
+
+corridor:
+  # Straight ego corridor. Lane half-width ~1.75 m (Phase 6 median lane width
+  # 3.45 m); an object centre within 1.5 m of the camera centreline overlaps the
+  # ego path for a 1.82 m-wide vehicle. Curved roads are NOT modelled.
+  half_width_m: 1.5
+  # Lateral placement when both range estimators abstain (box clipped at the
+  # image bottom, i.e. an object very close ahead). Never used for TTC.
+  fallback_range_m: 6.0
+
+persistence:
+  # Warn when at least k of the last n frames are candidates. Each frame is
+  # 0.104 s of latency. 2-of-3 is the starting point; swept.
+  k: 2
+  n: 3

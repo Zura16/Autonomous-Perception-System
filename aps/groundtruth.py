@@ -269,3 +269,63 @@ def project_frame(points_velo: np.ndarray, calib: Calibration) -> tuple[np.ndarr
     uv, depth = calib.project_velo(points_velo)
     keep = calib.in_image(uv, depth)
     return uv[keep], depth[keep]
+
+
+# ── Ground-truth kinematics from annotated tracklets ─────────────────────────
+#
+# Used by Phase 5 (TTC) and Phase 7 (FCW) so both score against ONE definition.
+# Closing speed is the least-squares slope of annotated near-face range over a
+# short window. Differencing is acceptable for the REFERENCE because tracklet
+# poses are smooth human annotations of a 3D box, not a per-frame depth estimate
+# -- the distinction CLAUDE.md hard rule 3 draws.
+
+KINEMATICS_WINDOW = 3  # frames either side of the slope
+KINEMATICS_MIN_POINTS = 5
+
+
+@dataclass(frozen=True)
+class GroundTruthKinematics:
+    range_m: float  # near-face longitudinal range
+    closing_speed_mps: float  # d(range)/dt; negative when approaching
+    lateral_m: float  # centroid x in the rectified camera frame; + right
+
+    @property
+    def ttc_s(self) -> float:
+        """TTC under constant relative velocity; +inf unless approaching."""
+        if self.closing_speed_mps >= 0:
+            return float("inf")
+        return float(-self.range_m / self.closing_speed_mps)
+
+
+def tracklet_kinematics(
+    tracklets: list, calib: Calibration, times_s: np.ndarray, classes: frozenset[str]
+) -> dict[tuple[int, int], GroundTruthKinematics]:
+    """(track_id, frame) -> kinematics, for every imageable annotated box.
+
+    Computed from the annotations alone -- independent of whether any detector
+    found the object -- so undetected threats stay in the denominator.
+    """
+    samples: dict[int, dict[int, tuple[float, float]]] = {}
+    for tr in tracklets:
+        if tr.object_type not in classes:
+            continue
+        for b in tr.boxes:
+            if b.box_2d(calib) is None:
+                continue
+            near_m, _ = b.ranges_m(calib)
+            centroid = calib.velo_to_rect0(b.corners_velo.mean(axis=0)[None, :])[0]
+            samples.setdefault(tr.track_id, {})[b.frame] = (near_m, float(centroid[0]))
+
+    out: dict[tuple[int, int], GroundTruthKinematics] = {}
+    for tid, by_frame in samples.items():
+        for f, (r, lateral) in by_frame.items():
+            window = [
+                g for g in range(f - KINEMATICS_WINDOW, f + KINEMATICS_WINDOW + 1) if g in by_frame
+            ]
+            if len(window) < KINEMATICS_MIN_POINTS:
+                continue
+            t = times_s[window]
+            d = np.array([by_frame[g][0] for g in window])
+            slope = float(np.polyfit(t - t.mean(), d, 1)[0])
+            out[(tid, f)] = GroundTruthKinematics(r, slope, lateral)
+    return out
