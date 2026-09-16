@@ -522,3 +522,29 @@ against the saved Phase 5 artifact before using it.
 
 **Next:** Phase 8 — HUD and top-down view, which presents results that already
 exist, then Phase 9's writeup.
+
+---
+
+## 2026-09-15 (cont.) — Phase 8: HUD and top-down
+
+Built last on purpose. `app/replay.py` composes the camera view with boxes,
+per-track range and TTC, the lane overlay and a metric top-down panel, and adds
+no estimate of its own.
+
+Three display rules, each a hard rule made visual: abstentions render as `--`
+rather than a filled-in guess; objects beyond the measured 10–30 m envelope are
+drawn dimmed and **without numbers**, so the HUD cannot launder an unsupported
+value into a screenshot; and the scope strip — monocular, offline, open-loop,
+nothing actuated, LiDAR is ground truth only — is stamped on every frame.
+
+**A still exposed a real defect in the still itself.** Rendering one frame leaves
+the scale-rate filter with a single observation, so every TTC correctly read
+`--`, which misrepresents the running system. Still mode now replays the
+preceding frames to warm the tracker and filter before writing.
+
+The replay also refuses to touch the held-out test drives: it loads dev+val only,
+so a viewer cannot be the thing that opens the test split before Phase 9.
+
+**Landed:** `app/replay.py`, `docs/figures/hud_still.jpg`.
+
+**Next:** Phase 9 — the writeup.

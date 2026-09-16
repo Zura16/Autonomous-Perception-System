@@ -23,7 +23,7 @@ to be able to say exactly why, with numbers.
 
 ## Status
 
-**Phases 0–7 of 9 complete**, including the headline artifact: the monocular
+**Phases 0–8 of 9 complete**, including the headline artifact: the monocular
 error-vs-range curve, graded by a LiDAR ruler whose own error was characterised
 first. That ordering is deliberate — an estimator with no ground truth is a
 decoration.
@@ -38,7 +38,7 @@ decoration.
 | 5 | **Closing speed + TTC** (scale-rate + KF) | ✅ |
 | 6 | **Lane detection + departure metric** | ✅ |
 | 7 | **FCW decision layer**: TPR **and FP/hour** | ✅ |
-| 8 | HUD + top-down view *(deliberately last)* | — |
+| 8 | **HUD + top-down view** *(deliberately last)* | ✅ |
 | 9 | Writeup | — |
 
 ## What Phase 1 established
@@ -321,6 +321,21 @@ number derived from two events.
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
 
+## What the system looks like running
+
+![HUD and top-down view](docs/figures/hud_still.jpg)
+
+`app/replay.py` presents results measured in earlier phases and adds no estimate
+of its own. Three rules govern what it may draw:
+
+- **Abstentions stay blank.** Where an estimator declined, the HUD shows `--`.
+  In the frame above, the car ahead reads no TTC because it is not closing.
+- **Values outside the credible envelope are dimmed and unlabelled.** Beyond
+  30 m the boxes are drawn but the numbers are not, because the project cannot
+  vouch for them.
+- **Scope is stamped on every frame**, so a screenshot cannot be mistaken for
+  something it is not.
+
 ## Setup
 
 ```bash
@@ -358,6 +373,7 @@ records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
 | `eval/` | Evaluation harnesses (detection; range/tracking/TTC to come) |
 | `configs/dataset.yaml` | The split. Changing it invalidates every benchmark row |
 | `docs/` | Benchmarks, decisions, error budget, glossary, history |
+| `app/replay.py` | HUD + top-down replay — presents measured results, produces none |
 | `tests/` | Closed-form geometry, AP, MOT, TTC, lane and decision-layer cases; 184 tests |
 | `eval/eval_box_quality.py` | Detector box vs label box, per object — the D-018 harness |
 | `legacy/` | The v1 demo, archived. **Not a baseline** — see below |

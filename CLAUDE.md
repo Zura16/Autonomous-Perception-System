@@ -151,7 +151,8 @@ python eval/eval_lane.py --render 8                          # lanes on KITTI ro
 python bench/run_bench.py --warmup 50 --iters 500 --report p50,p95,p99
 
 # ── Replay / visualize (Phase 8 — the demo, not the evidence)
-python app/replay.py --seq 0000 --hud --topdown
+python app/replay.py --drive 2011_09_26_drive_0059 --frames 0 200 --lanes --out artifacts/replay.mp4
+python app/replay.py --drive 2011_09_26_drive_0059 --still 96 --lanes --out docs/figures/hud_still.jpg
 
 # ── Tests & lint
 python -m pytest tests/ && ruff check . && black --check .
@@ -169,14 +170,14 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - [x] **Phase 5 — Closing speed + TTC.** ✅ KF over `u = 1/h` (exact under constant velocity), measured noise model, TTC unbiased (MAE 0.41 s < 3 s). Deadband measured as a gate; operating point deferred to Phase 7 ([D-022](docs/decisions.md)).
 - [x] **Phase 6 — Lane detection + departure metric.** ✅ Metric BEV + top-hat + sliding windows on 95 labelled KITTI road frames, parameters frozen before evaluation. Offset MAE 0.18 m; failure set with frames ([D-023](docs/decisions.md)).
 - [x] **Phase 7 — FCW / AEB-request decision layer.** ✅ Built and swept. **TPR/FP-per-hour declined as unpublishable**: 2 threat events in 2.7 minutes ([D-024](docs/decisions.md)). No operating point selected.
-- [ ] **Phase 8 — HUD + top-down view.** Deliberately last. It presents results that already exist.
+- [x] **Phase 8 — HUD + top-down view.** ✅ `app/replay.py`. Presents measured results only: abstentions stay blank, values outside the 10–30 m envelope are dimmed and unlabelled, scope stated on every frame.
 - [ ] **Phase 9 — Writeup.** README leading with the error curve and the operating envelope; `claims.md` generated from `benchmarks.md`; failure modes published, not buried.
 
 ## Current status
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 7 COMPLETE** (2026-09-15). Phases 0–6 ✅. **Next: Phase 8 — HUD + top-down view**, then Phase 9 writeup.
+- **Phase:** **Phase 8 COMPLETE** (2026-09-15). Phases 0–7 ✅. **Next: Phase 9 — writeup**: README leading with the error curve and envelope, `claims.md` generated from `benchmarks.md` and pinned to commits, failure modes published.
 - **⚠ PHASE 7'S RESULT IS THAT THE METRIC CANNOT BE PRODUCED ([D-024](docs/decisions.md)).** Val is **0.045 h** of exposure holding **2 threat events** below TTC 2 s (11 frames of 8383 annotated), over 21 in-path closing objects, minimum in-path TTC **1.17 s**. A TPR over 2 events is not a rate; 12 false alarms carry a 137–462/h interval. **No TPR, no FP/hour, and no operating point is published.** The held-out test split (1.3 min) is smaller still — this needs staged NCAP-style scenarios or hours of naturalistic driving.
 - **Threat count is set by the corridor definition, not the data**: 2 events at ±1.5 m, 8 at 2.5 m, 84 at 5.0 m — but a 5 m corridor counts oncoming traffic an FCW must *not* warn about.
 - **What Phase 7 does show:** persistence is the strongest lever (3/3 cuts onsets 13→3, false alarms 12→2, for 0.2 s latency); **half of all false alarms are ghost tracks** with no annotated object; the Phase 5 `sigma` deadband can suppress the threat itself (0 of 2 caught).
