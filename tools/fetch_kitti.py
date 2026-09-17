@@ -176,6 +176,20 @@ def frame_count(drive_dir: Path) -> int:
     return len(list(imgs.glob("*.png"))) if imgs.is_dir() else 0
 
 
+def stream_counts(drive_dir: Path, keep: list[str]) -> dict[str, int]:
+    """Files present per kept sensor stream.
+
+    Counting only images once reported a drive as complete while four velodyne
+    scans were missing, and the ground-truth harness crashed on the first of
+    them. Every stream a phase depends on is counted.
+    """
+    counts = {}
+    for stream in keep:
+        data = drive_dir / stream / "data"
+        counts[stream] = len(list(data.iterdir())) if data.is_dir() else 0
+    return counts
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", type=Path, default=REPO / "configs" / "dataset.yaml")
@@ -205,16 +219,27 @@ def main() -> int:
         manifest = json.loads(manifest_path.read_text())
 
     if args.check:
-        print(f"{'drive':<28} {'split':<6} {'frames':>7} {'expected':>9}  status")
+        header = f"{'drive':<28} {'split':<6} {'frames':>7} {'expected':>9}"
+        header += "".join(f"{s:>18}" for s in keep)
+        print(header + "  status")
         ok = True
         for d in drives:
             dd = root / date / f"{d['id']}_sync"
             n = frame_count(dd)
+            counts = stream_counts(dd, keep)
+            # A stream shorter than the image count is not necessarily a broken
+            # download -- some KITTI drives genuinely ship fewer velodyne scans --
+            # so it is reported as a gap, with the number, not as a failure.
+            gaps = {s: c for s, c in counts.items() if c != n}
             good = n == d["frames"]
             ok &= good
+            status = "ok" if good else "MISSING/INCOMPLETE"
+            if good and gaps:
+                status = "ok, stream gaps: " + ", ".join(f"{s} -{n - c}" for s, c in gaps.items())
             print(
-                f"{d['id']:<28} {d['split']:<6} {n:>7} {d['frames']:>9}  "
-                f"{'ok' if good else 'MISSING/INCOMPLETE'}"
+                f"{d['id']:<28} {d['split']:<6} {n:>7} {d['frames']:>9}"
+                + "".join(f"{counts[s]:>18}" for s in keep)
+                + f"  {status}"
             )
         calib = root / date / "calib_cam_to_cam.txt"
         print(f"calibration: {'ok' if calib.exists() else 'MISSING'} ({calib})")

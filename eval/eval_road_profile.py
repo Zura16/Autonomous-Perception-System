@@ -59,7 +59,10 @@ def measure(split: str, camera: CameraModel, stride: int) -> tuple[dict, int]:
     for drive in load_split(split):
         print(f"  {drive.id}: every {stride}th of {len(drive)} frames", flush=True)
         for fi in range(0, len(drive), stride):
-            rect = drive.calib.velo_to_rect0(drive.frame(fi).points(min_forward_m=0.5))
+            frame = drive.frame(fi)
+            if not frame.has_velodyne:
+                continue  # no scan: the road cannot be measured on this frame
+            rect = drive.calib.velo_to_rect0(frame.points(min_forward_m=0.5))
             x, y, z = rect[:, 0], rect[:, 1], rect[:, 2]
             road = (
                 (y > camera.height_m - ROAD_BAND_ABOVE_M)

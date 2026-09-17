@@ -65,6 +65,8 @@ def run(
 
         for fi in frames:
             frame = drive.frame(fi)
+            if not frame.has_velodyne:
+                continue  # no LiDAR scan: this frame cannot be ground-truthed
             image = frame.image()
             if not warmed:
                 detector.warmup(image)

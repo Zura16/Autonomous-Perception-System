@@ -87,6 +87,17 @@ class Frame:
             raise FileNotFoundError(f"unreadable image: {self.image_path}")
         return img
 
+    @property
+    def has_velodyne(self) -> bool:
+        """Whether this frame has a LiDAR scan.
+
+        Not every KITTI raw drive ships one scan per image: `drive_0009` has 447
+        images and 443 velodyne files. Ground-truth harnesses must skip those
+        frames rather than assume a scan exists -- and must do so visibly, since
+        a silently skipped frame is a silently shrunken denominator.
+        """
+        return self.velo_path.exists()
+
     def points(self, min_forward_m: float = 0.0) -> np.ndarray:
         """(N, 4) LiDAR returns as [x, y, z, reflectance] in the velodyne frame.
 

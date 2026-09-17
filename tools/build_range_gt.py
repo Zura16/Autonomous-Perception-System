@@ -65,8 +65,12 @@ def collect(split: str, max_frames: int | None) -> dict[str, np.ndarray]:
         frames = sorted(by_frame)[: max_frames or None]
         print(f"  {drive.id}: {len(frames)} labelled frames", flush=True)
 
+        skipped = 0
         for fi in frames:
             frame = drive.frame(fi)
+            if not frame.has_velodyne:
+                skipped += 1  # no LiDAR scan for this frame: no ground truth exists
+                continue
             uv, depth = project_frame(frame.points(min_forward_m=0.5), drive.calib)
             for tbox in by_frame[fi]:
                 box = tbox.box_2d(drive.calib)
@@ -101,6 +105,9 @@ def collect(split: str, max_frames: int | None) -> dict[str, np.ndarray]:
                         rows["spread_m"].append(gt.spread_m)
                     n_in = gt.n_in_box
                 rows["n_in_box"].append(n_in)
+
+        if skipped:
+            print(f"    {skipped} frames skipped: no velodyne scan", flush=True)
 
     return {k: np.array(v) for k, v in rows.items()}
 
