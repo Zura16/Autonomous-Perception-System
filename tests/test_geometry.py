@@ -25,7 +25,9 @@ from tests.test_calibration import CY, FY, make_calib
 H_CAM = 1.655
 
 
-def make_camera(height_m: float = H_CAM, pitch_deg: float = 0.0) -> CameraModel:
+def make_camera(
+    height_m: float = H_CAM, pitch_deg: float = 0.0, max_range_m: float = 50.0
+) -> CameraModel:
     return CameraModel(
         height_m=height_m,
         height_std_m=0.027,
@@ -36,6 +38,7 @@ def make_camera(height_m: float = H_CAM, pitch_deg: float = 0.0) -> CameraModel:
         },
         min_rows_from_bottom=2,
         min_pixels_below_horizon=3.0,
+        max_range_m=max_range_m,
     )
 
 
@@ -63,9 +66,17 @@ def test_nose_down_pitch_raises_the_horizon_in_the_image():
 
 # Below ~6 m the contact row falls outside a 375-row image, so those cases are
 # legitimately clipped rather than measurable -- see the clipped-box tests.
+#
+# Each case runs against a camera whose declared support comfortably contains
+# it. The algebra inverts exactly at any range; whether the estimator is ALLOWED
+# to answer there is a separate question, tested on its own below. Folding the
+# two together would let a policy change look like a broken projection, and
+# putting a case exactly ON the support boundary would test nothing but the
+# rounding of a float comparison.
 @pytest.mark.parametrize("truth", [7.0, 10.0, 25.0, 50.0, 80.0])
 def test_contact_point_inverts_the_projection_exactly(truth):
-    calib, camera = make_calib(baseline_m=0.0), make_camera()
+    calib = make_calib(baseline_m=0.0)
+    camera = make_camera(max_range_m=1.1 * truth)
     box = np.array([100.0, 50.0, 200.0, contact_row_for(truth)])
     assert range_contact_point(box, calib, camera) == pytest.approx(truth)
 
@@ -79,6 +90,36 @@ def test_contact_point_abstains_above_the_horizon():
     calib, camera = make_calib(baseline_m=0.0), make_camera()
     assert np.isnan(range_contact_point(np.array([0.0, 0.0, 10.0, CY - 5]), calib, camera))
     assert np.isnan(range_contact_point(np.array([0.0, 0.0, 10.0, CY]), calib, camera))
+
+
+def test_contact_point_abstains_beyond_its_characterised_range():
+    """Past `max_range_m` the estimator extrapolates beyond all of its evidence.
+
+    This is the D-025 defect, pinned. A box bottom just above the 50 m contact
+    row used to return a number -- up to 369 m on the test split -- because the
+    only guard was a 3 px numerical floor. At 50 m the denominator is already
+    down to 23.9 px, where one pixel of box-edge error costs 4.2% of the range.
+    """
+    calib, camera = make_calib(baseline_m=0.0), make_camera()
+    inside = np.array([0.0, 0.0, 10.0, contact_row_for(49.0)])
+    outside = np.array([0.0, 0.0, 10.0, contact_row_for(51.0)])
+    assert range_contact_point(inside, calib, camera) == pytest.approx(49.0)
+    assert np.isnan(range_contact_point(outside, calib, camera))
+
+
+def test_the_support_gate_binds_before_the_numerical_floor():
+    """The two guards are not interchangeable, and the wider one must win.
+
+    A 3 px denominator is finite arithmetic and a 398 m answer, which is why the
+    numerical floor alone shipped the defect. This pins that a box the numerical
+    floor would happily accept is still refused for being out of support.
+    """
+    calib, camera = make_calib(baseline_m=0.0), make_camera()
+    below = 5.0  # comfortably past the 3 px numerical floor
+    box = np.array([0.0, 0.0, 10.0, CY + below])
+    assert below > camera.min_pixels_below_horizon
+    assert FY * H_CAM / below > camera.max_range_m  # ~239 m, the answer it used to give
+    assert np.isnan(range_contact_point(box, calib, camera))
 
 
 def test_contact_point_is_independent_of_box_height():

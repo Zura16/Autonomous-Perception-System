@@ -254,3 +254,52 @@ in-path TTC of 1.17 s. Widening the corridor to manufacture events instead count
 adjacent and oncoming traffic. Neither TPR nor FP/hour is publishable
 ([D-024](decisions.md)). Recorded as a failure mode of the *measurement*, which
 is where it belongs.
+
+---
+
+## Phase 9 — held-out test
+
+### FM-21 · A box bottom near the horizon makes range diverge · **CONFIRMED**
+
+![horizon pole](figures/fm21_horizon_pole_0009_f94.png)
+
+`2011_09_26_drive_0009`, frame 94. Range is `f·h/(v_bottom − v_horizon)`. For an
+object at 25 m the denominator should be ~47.7 px; for the boxes highlighted by
+this failure it is **4.7 px**, and the estimator returned **253 m for an object
+at 25.8 m**. Their box *heights* are right for their true range — the boxes are
+the correct size, placed ~43 px too high.
+
+The guard that should have caught it, `min_pixels_below_horizon: 3`, was a
+division-by-zero check wearing a validity check's name: it permits a 398 m answer
+at **33% range error per pixel** of box-edge error. Fixed by abstaining past the
+already-declared 50 m evaluation envelope ([D-025](decisions.md)).
+
+**Why it matters more than its frequency suggests.** It reaches 3.7% of one
+drive's detections and 0–1.5% elsewhere, yet **10 such detections carried 81% of
+the summed bias** of a 199-detection block whose median error was −1.54 m. A
+long-tailed error source is invisible in a median, dominant in a mean, and this
+project reported the mean.
+
+### FM-22 · Scene-to-scene variation exceeds every effect measured so far · **CONFIRMED**
+
+Contact-point MAPE at 10–30 m, same camera, same detector, same parameters:
+
+| sequence | MAPE | median | >30% APE |
+|---|---|---|---|
+| `0015` (test, road) | **7.7%** | 4.7% | 3.2% |
+| `0009` (test, city) | **23.3%** | 11.7% | 14.1% |
+
+and *within* `drive_0009`, by 50-frame block: **55.5%** at frames 50–99 against
+**6.6%** at 300–349. A single number for "monocular range error" describes the
+mix of scenes it was measured on at least as much as the estimator. Five val
+sequences spanning 8.5–12.4% looked like convergence; it was a narrow sample.
+
+### FM-23 · Abstention is not free, and the near field pays most · **CONFIRMED**
+
+The D-025 gate is the right behaviour under hard rule 14, but it is a coverage
+cost and is reported as one: contact-point validity **95% (val) / 90% (test)**,
+falling to **71% in the 0–10 m test bin**, and the estimator is **no longer
+evaluable at all beyond 50 m** — every capped estimate there is an underestimate
+by construction (bias −14.27 m). An estimator that abstains on a third of the
+near field is not obviously better for an FCW than one that answers badly; that
+trade is a Phase 5/7 question and is not settled here.

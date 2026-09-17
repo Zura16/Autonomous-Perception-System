@@ -52,6 +52,7 @@ class CameraModel:
     priors: dict[str, dict]
     min_rows_from_bottom: int
     min_pixels_below_horizon: float
+    max_range_m: float
 
     @classmethod
     def from_config(cls, path: Path | None = None) -> CameraModel:
@@ -63,6 +64,7 @@ class CameraModel:
             priors=cfg["priors"],
             min_rows_from_bottom=int(cfg["contact_point"]["min_rows_from_bottom"]),
             min_pixels_below_horizon=float(cfg["contact_point"]["min_pixels_below_horizon"]),
+            max_range_m=float(cfg["contact_point"]["max_range_m"]),
         )
 
     def prior_height_m(self, group: str) -> float:
@@ -112,17 +114,24 @@ def range_contact_point(
 
     `box` is [x1, y1, x2, y2]; the bottom edge `y2` is taken as the contact row.
 
-    Abstains in two cases, both of them ill-posed rather than merely hard:
+    Abstains in three cases, all ill-posed rather than merely hard:
 
       * the contact point is at or above the horizon -- the relation diverges,
         and such a box is floating, mis-detected, or on an upslope the
         flat-ground model does not describe;
       * the box is clipped at the bottom image edge -- the contact point is
         outside the picture, so the bottom edge measures the sensor boundary
-        rather than the object.
+        rather than the object;
+      * the implied range exceeds `camera.max_range_m` -- the box bottom is so
+        close to the horizon that the answer lies beyond every range this
+        estimator has been characterised at, and one pixel of box-edge error
+        moves it by more than the claimed accuracy.
 
-    Returning a number in either case would be a confident answer to a question
-    the geometry cannot pose.
+    Returning a number in any of these cases would be a confident answer to a
+    question the geometry cannot pose. The third case was found on the held-out
+    test split, where 3.7% of one drive's detections landed inside it and
+    produced estimates up to 369 m, inflating mean error in every range bin they
+    touched (docs/decisions.md D-025).
     """
     if box_is_clipped_at_bottom(box, calib, camera, cam):
         return float("nan")
@@ -132,7 +141,15 @@ def range_contact_point(
     below = float(box[3]) - horizon
     if not np.isfinite(below) or below < camera.min_pixels_below_horizon:
         return float("nan")
-    return float(fy * camera.height_m / below)
+    range_m = float(fy * camera.height_m / below)
+    # Tested in range space so the code states the rule the config states, with
+    # one source of truth rather than an equivalent pixel threshold kept in sync
+    # by hand. An object sitting exactly at max_range_m still falls either way on
+    # rounding; that boundary is arbitrary by construction and nothing depends on
+    # which side it lands.
+    if range_m > camera.max_range_m:
+        return float("nan")
+    return range_m
 
 
 def range_size_prior(

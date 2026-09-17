@@ -1177,6 +1177,105 @@ errors."
 
 ---
 
+## D-025 · The held-out split broke the envelope, and exposed an ungated pole in the contact-point estimator · 2026-09-16 · Active
+
+**What happened.** Phase 9 ran the frozen pipeline on the held-out test split
+(`0009`, `0015`) for the first time. **The credible operating envelope declared
+in Phase 3 — 10–30 m at ≤15% MAPE — did not hold.** Best-estimator-per-bin MAPE:
+
+| bin (m) | 0–10 | 10–20 | 20–30 | 30–50 | 50+ |
+|---|---|---|---|---|---|
+| **val** (declared on) | 22.7 | **10.3** | **11.0** | 15.3 | 16.5 |
+| **test** (held out, as frozen) | 24.1 | **17.2** | **15.6** | 14.4 | 14.3 |
+
+Both bins the envelope rested on missed the 15% threshold. This is recorded
+first and kept first because it is the result of the experiment the split exists
+for. Everything below is diagnosis, and none of it is licensed to replace it.
+
+**The diagnosis, and the order in which hypotheses died.** Four were tested;
+three were killed by measurement:
+
+1. **The ruler degraded.** No. Gated ruler MAE on test is **0.27 m** against
+   val's 0.25 m, failure rate 0.15% against 0.27% ([Row 1.7](benchmarks.md)).
+   The instrument transferred.
+2. **The estimator is uniformly worse on test.** No — and this is where pooling
+   would have lied. **Medians barely moved** (10–20 m contact-point: val 7.5%
+   → test 10.3%). The mean moved because gross errors >30% APE went **3.0% →
+   12.3%**. A tail, not a shift.
+3. **Occlusion: a nearer object hiding the box's lower body.** Not the driver.
+   87.9% of gross outliers have a nearer object in frame — against 85.7% of the
+   rest. No discrimination. Refining it to "a nearer detection covering >50% of
+   this box's bottom edge" does show real damage (+8.29 m bias) but reaches only
+   **8 of 199** boxes in the worst block.
+4. **Road non-flatness**, the [D-020](#d-020) mechanism. No. Measured per frame
+   block from LiDAR, the worst block (frames 50–99, observed bias **+9.08 m**)
+   has a road profile predicting **−0.65 m** — wrong sign, an order of magnitude
+   short.
+
+**What it actually is.** The error is not distributed at all. In the worst
+block, **10 detections of 199 carry 81% of the summed bias**, and the block's
+median error is −1.54 m — typically fine. Those detections share one property:
+a box bottom within ~5 px of the horizon row. Range is
+
+    D = f·h / (v_bottom − v_horizon)
+
+so the denominator was approaching zero and the estimator was returning **up to
+369 m**. Their box *heights* are correct for their true range; the boxes are the
+right size, placed ~43 px too high.
+
+**The defect is a guard that was never a guard.** `min_pixels_below_horizon: 3`
+read like a validity check and was only ever a division-by-zero check. At a 3 px
+denominator the estimator will answer **398 m**, eight times the furthest range
+this project has ever measured, and one pixel of box-edge error moves the answer
+by **33%**. Fractional range sensitivity to the bottom edge is exactly
+`1/(v_bottom − v_horizon)`, so a threshold on that denominator *is* a threshold
+on precision.
+
+**The fix, and why its value is not fitted to test.** `range_contact_point`
+abstains when the implied range exceeds `contact_point.max_range_m = 50 m`. The
+value is **50 m because [D-015](#d-015) already declared 0–50 m as the
+evaluation envelope** — past it the estimator extrapolates beyond any data that
+could contradict it, and hard rule 14 requires abstention over a fabricated
+number. At 50 m the denominator is 23.9 px and one pixel costs 4.2%, which is
+already the limit a 10–15% MAPE claim can absorb. No test-split quantity enters
+the choice.
+
+**But the sequencing is still a fact: the defect was found by looking at test.**
+That cannot be undone by a good justification for the constant, so:
+
+- the **as-frozen test numbers above stay the headline**, and the
+  post-fix test numbers are reported beside them as what they are — a
+  measurement taken after the split was inspected, no longer clean held-out
+  evidence;
+- the gate's value is validated on **val**, which was always development data,
+  where it was *also* repairing a real defect: val 30–50 m MAPE 18.7% → 11.8%,
+  by abstaining on 133 of 984 boxes. **The val headline had been inflated by
+  this pole all along** and nobody noticed, because on val it never got large
+  enough to look wrong.
+
+**The finding that outlives the fix.** Mean absolute percentage error over a
+long-tailed distribution is a bad summary and this project shipped it as its
+headline for six phases. Val's tail was thin enough that MAPE and median told
+the same story; test's was not, and MAPE moved 7 points while the median moved
+3. **Every MAPE row in `benchmarks.md` now carries its median beside it** — the
+gap between the two is the honest measure of how much a single number can be
+trusted.
+
+**Interview version.** "My held-out split broke my headline claim — the 10–30 m
+envelope I'd declared on validation came back at 17% and 16% instead of under
+15%. Chasing it down, three plausible explanations died on measurement: the
+ground truth was fine, occlusion didn't discriminate, and the road-slope
+mechanism predicted the wrong sign. What it actually was: ten detections out of
+two hundred carried 81% of the bias, all of them boxes sitting within a few
+pixels of the horizon, where the contact-point formula divides by almost zero
+and was returning 369 metres. The guard I thought I had was a divide-by-zero
+check, not a validity check. The deeper lesson is that I'd been reporting mean
+percentage error on a long-tailed distribution — on validation the mean and
+median agreed so it never bit, and on held-out data the mean moved twice as far
+as the median."
+
+---
+
 ## Open questions
 
 | Question | Blocks | Notes |

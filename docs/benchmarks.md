@@ -47,6 +47,19 @@ dispatch measures the launch, not the work.
 | Frame rate | **9.657 Hz** measured (dt = 103.56 ms, σ = 0.06 ms) — *not* 10 Hz ([D-006](decisions.md)) |
 | Split | by sequence ([D-002](decisions.md)) — dev `0013` · val `0059` `0084` `0091` `0056` `0027` · test `0009` `0015` |
 
+### Row 0.1 — Sensor and timing constants
+
+| | measured |
+|---|---|
+| frame interval | **103.56 ms**, σ 0.06 ms → **9.657 Hz** (not the documented 10 Hz) |
+| intrinsics, cam2 rectified | fx = fy = 721.5377 px · cx = 609.5593 · cy = 172.8540 |
+| horizontal field of view | 81.4° |
+| rect0 → cam2 offset | [+0.0598, −0.0004, +0.0027] m |
+
+Hard-coding the documented 10 Hz would put a **3.4% systematic error** into every
+velocity and TTC figure, indistinguishable afterwards from estimator bias
+([D-006](decisions.md)).
+
 ### Label inventory
 
 Near-face range bins, FCW classes (Car/Van/Truck/Pedestrian/Cyclist), boxes that
@@ -964,6 +977,166 @@ At 2.0 s / no deadband / 1-of-1: 36 candidate frames, split evenly —
 Half the false alarms are not decision errors at all: they are tracks on things
 that are not annotated objects. Precision at the decision layer is bounded by
 detector precision, exactly as MOTA was bounded by detector recall (Row 4.4).
+
+---
+
+# Phase 9 — the held-out test split
+
+Drives `0009` (city, 447 frames) and `0015` (road, 297 frames), 744 frames,
+untouched until 2026-09-16. Every parameter frozen on dev/val beforehand.
+
+### Row 9.1 — The ground-truth ruler transfers
+
+Same estimator (`shrink_p20` + 1.5 m spread gate), same thresholds, run on test
+labels for the first time. N = 4442 labelled boxes, 1456 measurable.
+
+| bin (m) | kept | MAE | med \|e\| | p95 | fail% (\|e\|>5 m) |
+|---|---|---|---|---|---|
+| 0–10 | 132 | 0.24 | 0.18 | 0.38 | 0.00% |
+| 10–20 | 339 | 0.18 | 0.13 | 0.45 | 0.00% |
+| 20–30 | 418 | 0.21 | 0.15 | 0.55 | 0.00% |
+| 30–50 | 416 | 0.40 | 0.22 | 0.66 | 0.48% |
+| 50+ | 61 | 0.41 | 0.32 | 0.57 | 0.00% |
+| **all** | **1366** | **0.27** | **0.17** | **0.59** | **0.15%** |
+
+Against val's **0.25 m / 0.27% fail**. The ruler carries its own error onto a
+split it has never seen without degrading, so every comparison below is against
+an instrument known to be sound. Coverage: **38%** of labelled boxes reach a
+usable tier (val 45%), and **1366 of 4442 = 30.8%** survive to a ground-truth
+range (val 38.1%).
+
+4 frames of `drive_0009` carry no velodyne scan (447 images, 443 scans) and are
+skipped and reported, never silently dropped.
+
+### Row 9.2 — Detection on held-out data
+
+| metric | val | test |
+|---|---|---|
+| AP@0.5 class-agnostic | 0.615 | **0.737** |
+| AP vehicle | 0.662 | 0.774 |
+| AP VRU | 0.450 | **0.127** (250 labels) |
+| recall by bin (%) | 86 / 76 / 65 / 46 / 24 | **93 / 89 / 74 / 61 / 51** |
+
+The test drives are *easier* for the detector. This matters when reading Row
+9.3: the range estimator was handed **more** boxes and better ones, and still
+did worse.
+
+### Row 9.3 — THE HELD-OUT RESULT, AS FROZEN ← the headline
+
+Pipeline exactly as declared at the end of Phase 3. N = 3214 ground-truthable
+detections. Best estimator per bin:
+
+| bin (m) | val (declared on) | test (held out) | verdict |
+|---|---|---|---|
+| 0–10 | 22.7% | 24.1% | both fail |
+| **10–20** | **10.3%** | **17.2%** | **envelope FAILS** |
+| **20–30** | **11.0%** | **15.6%** | **envelope FAILS** |
+| 30–50 | 15.3% | 14.4% | improved |
+| 50+ | 16.5% | 14.3% | improved |
+
+**The credible operating envelope declared in Phase 3 — 10–30 m at ≤15% MAPE —
+does not hold on held-out data.** Both bins it rested on miss the threshold,
+while the far bins improve. No contiguous-from-zero envelope exists at any of
+10 / 15 / 20%.
+
+### Row 9.4 — Where the generalisation gap actually is
+
+The same data by median and p90 rather than mean, contact-point:
+
+| bin (m) | MAPE val→test | **median** APE val→test | **p90** APE val→test |
+|---|---|---|---|
+| 0–10 | 22.7 → 24.1 | 10.9 → 11.6 | 62.5 → 50.2 |
+| 10–20 | 10.3 → 18.4 | **7.5 → 10.3** | **19.5 → 35.3** |
+| 20–30 | 12.2 → 20.3 | **7.7 → 8.8** | **22.5 → 30.8** |
+| 30–50 | 18.7 → 20.6 | 12.0 → 10.0 | 28.7 → 35.9 |
+
+**The central behaviour transfers; the tail does not.** At 20–30 m the median
+moves 1.1 points while the mean moves 8.1. Reporting MAPE alone described a
+collapse that did not happen to the typical object, and hid one that did happen
+to the worst 10%.
+
+### Row 9.5 — The tail is 10 detections, not a distribution
+
+`drive_0009` carries the entire degradation; `drive_0015` is the best sequence
+in the project. Contact-point, 10–30 m:
+
+| drive | split | N | MAPE | median | >30% APE | bias |
+|---|---|---|---|---|---|---|
+| `0015` road | test | 444 | **7.7%** | 4.7% | 3.2% | +0.20 |
+| `0091` city | val | 1143 | 8.5% | 5.4% | 2.6% | +0.80 |
+| `0059` city | val | 1497 | 12.2% | 9.8% | 3.4% | +0.39 |
+| `0084` city | val | 858 | 12.4% | 9.4% | 4.1% | −0.61 |
+| `0056` city | val | 406 | 11.7% | 4.3% | 7.1% | +0.80 |
+| **`0009` city** | **test** | **1287** | **23.3%** | **11.7%** | **14.1%** | **+1.70** |
+
+Within `drive_0009`, by 50-frame block:
+
+| frames | N | MAPE | >30% APE | bias |
+|---|---|---|---|---|
+| 50–99 | 199 | **55.5%** | 23.6% | **+9.08** |
+| 150–199 | 168 | 26.8% | 30.4% | +0.16 |
+| 300–349 | 162 | **6.6%** | 1.9% | +0.25 |
+
+In the worst block the **median error is −1.54 m** and **10 detections of 199
+carry 81% of the summed bias**, the worst estimating 253 m for an object at
+25.8 m.
+
+### Row 9.6 — Three hypotheses killed by measurement
+
+| hypothesis | test | verdict |
+|---|---|---|
+| the ruler degraded | test ruler MAE 0.27 m vs val 0.25 | **no** (Row 9.1) |
+| occlusion: a nearer object hides the lower body | nearer object present for 87.9% of outliers vs **85.7%** of the rest | **no discrimination** |
+| road non-flatness (D-020 mechanism) | worst block observed bias **+9.08 m**, road profile predicts **−0.65 m** | **wrong sign, 10× short** |
+| box bottom near the horizon row | outlier denominators ~4.7 px vs 47.7 px expected | **confirmed** |
+
+The refined occlusion form — a nearer detection covering >50% of *this* box's
+bottom edge — does show +8.29 m bias, but reaches only 8 of 199 boxes in the
+worst block. Real, secondary.
+
+### Row 9.7 — The defect: an ungated pole, and what closing it costs
+
+`D = f·h/(v_bottom − v_horizon)`. The only guard was
+`min_pixels_below_horizon: 3`, a division-by-zero check that permits a **398 m**
+answer and a **33% range error per pixel** of box-edge error. Fixed by abstaining
+beyond `max_range_m = 50 m`, the envelope D-015 already declared ([D-025](decisions.md#d-025)).
+
+Boxes inside the pole, by drive:
+
+| drive | split | N | inside pole | their med \|e\| | worst estimate |
+|---|---|---|---|---|---|
+| `0091` | val | 1545 | 0 (0.0%) | — | — |
+| `0059` | val | 2249 | 58 (0.9%) | 23.9 m | 99 m |
+| `0084` | val | 1674 | 93 (1.5%) | 9.9 m | 88 m |
+| `0015` | test | 883 | 43 (1.3%) | 8.2 m | 109 m |
+| `0009` | test | 2164 | **118 (3.7%)** | 9.9 m | **369 m** |
+
+Post-fix, best estimator per bin:
+
+| bin (m) | val pre | val post | test pre | test post |
+|---|---|---|---|---|
+| 0–10 | 22.7% | 21.0% | 24.1% | 22.5% |
+| 10–20 | 10.3% | **10.1%** | 17.2% | **15.8%** |
+| 20–30 | 11.0% | **10.7%** | 15.6% | **12.2%** |
+| 30–50 | 15.3% | **11.8%** | 14.4% | **12.7%** |
+
+**Medians are unchanged by the fix** (val 10–20 m: 7.5% → 7.5%; test 20–30 m:
+8.8% → 8.6%). It deletes fabricated values; it does not improve the estimator.
+
+Cost, paid in abstentions and reported as required: contact-point validity falls
+to **95% (val) / 90% (test)**; in the 0–10 m bin it is 71% on test, and
+contact-point is **no longer evaluable at all in the 50+ bin** — capped at 50 m,
+every estimate there is an underestimate by construction (bias −14.27 m).
+
+**The fix does not rescue the claim.** Test 10–20 m is 15.8%, still past 15%.
+The honest post-fix envelope is **20–50 m at ≤13% on both splits**, with 10–20 m
+marginal (10.1% val vs 15.8% test) and the near field failing on both.
+
+⚠ **Provenance.** Rows 9.3–9.6 are clean held-out measurements. Row 9.7's
+post-fix columns are **not** — the defect was found by inspecting test, so those
+numbers were taken after the split was seen. The gate's *value* comes from
+D-015, which predates it, and it repairs val too; but the sequencing stands and
+the as-frozen result above remains the headline.
 
 ---
 

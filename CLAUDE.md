@@ -103,9 +103,11 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Detection recall vs range (conf 0.25) | **86 / 76 / 65 / 46 / 24 %** · VRU **75 / 69 / 36 / 2 / 0 %** |
 | Detection latency (M2 MPS, 640px, batch 1) | p50 **17.12** · p95 24.75 · p99 **34.01 ms** = 33% of budget · **5/1450 frames over budget**, max 553 ms |
 | **Evaluation envelope** | **0–50 m** — bounded by evidence, not accuracy. Usable N/bin: 430/1142/793/475/**30** ([D-015](docs/decisions.md)) |
-| **Range MAPE by bin** — contact-point | **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %** (MAE 1.28/1.51/3.03/7.11/13.72 m) |
-| **Range MAPE by bin** — size-prior | **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %** |
-| **Credible operating envelope** | **10–30 m at ≤15% MAPE.** No bin reaches 10%; best is 10.3% at 10–20 m. Excludes the near field |
+| **Range MAPE by bin** — contact-point (val, post-D-025) | **21.0 / 10.1 / 10.7 / 11.8 %** (MAE 1.15/1.48/2.65/4.36 m) |
+| **Range MAPE by bin** — size-prior (val) | **29.5 / 14.9 / 11.0 / 15.3 %** |
+| **HELD-OUT test, as frozen** | best-per-bin **24.1 / 17.2 / 15.6 / 14.4 %** — **the 10–30 m envelope FAILED** ([D-025](docs/decisions.md)) |
+| **Credible operating envelope** | **20–50 m at ≤13%, on both splits.** 10–20 m is marginal (val 10.1%, test 15.8%); the near field fails on both. The former "10–30 m at ≤15%" did **not** survive held-out data |
+| **Median vs mean APE** (val → test) | 7.5→10.3 / 7.7→8.8 median against 10.3→18.4 / 12.2→20.3 mean. **The centre transfers; the tail does not** |
 | Camera geometry (LiDAR-measured) | height **1.655 m** (std 0.027) · camera-to-road pitch mean +0.150°, \|p95\| **0.715°** |
 | Detector box height bias (val, 5254 pairs) | **−4.5% overall · −7.1% at 0–10 m** · bottom edge −4.8 px near. A bias, not jitter ([D-018](docs/decisions.md)) |
 | Far-range error cause | **road non-flatness** — road 10 cm below the assumed plane by 50 m; explains most of the bias beyond 20 m ([D-020](docs/decisions.md)) |
@@ -121,7 +123,9 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | **FCW: TPR and FP/hour** | **NOT PUBLISHABLE on this data** — val holds **2 threat events** below TTC 2 s in **0.045 h** of exposure; min in-path TTC 1.17 s ([D-024](docs/decisions.md)) |
 | FCW decision layer, what is measured | persistence 3/3 cuts onsets 13→3 and false alarms 12→2 at TTC 2.0 s for 0.2 s latency · **half of false alarms are ghost tracks** · `sigma` deadband can suppress the threat |
 | Per-stage latency p50/p95/p99 | detection only so far — see above. Track/range/KF/decide not yet measured |
-| Test suite count | **184** |
+| GT ruler on **held-out test** | MAE **0.27 m**, fail 0.15% — against val's 0.25 m / 0.27%. The instrument transferred |
+| Detection on **held-out test** | AP **0.737** class-agnostic (val 0.615) · recall 93/89/74/61/51% · VRU AP **0.127** on 250 labels |
+| Test suite count | **186** |
 
 ## Common commands (run from repo root)
 
@@ -171,13 +175,19 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - [x] **Phase 6 — Lane detection + departure metric.** ✅ Metric BEV + top-hat + sliding windows on 95 labelled KITTI road frames, parameters frozen before evaluation. Offset MAE 0.18 m; failure set with frames ([D-023](docs/decisions.md)).
 - [x] **Phase 7 — FCW / AEB-request decision layer.** ✅ Built and swept. **TPR/FP-per-hour declined as unpublishable**: 2 threat events in 2.7 minutes ([D-024](docs/decisions.md)). No operating point selected.
 - [x] **Phase 8 — HUD + top-down view.** ✅ `app/replay.py`. Presents measured results only: abstentions stay blank, values outside the 10–30 m envelope are dimmed and unlabelled, scope stated on every frame.
-- [ ] **Phase 9 — Writeup.** README leading with the error curve and the operating envelope; `claims.md` generated from `benchmarks.md`; failure modes published, not buried.
+- [ ] **Phase 9 — Writeup.** README leading with the error curve and the operating envelope; `claims.md` generated from `benchmarks.md`; failure modes published, not buried. **Held-out evaluation done — and it broke the headline claim ([D-025](docs/decisions.md)).**
 
 ## Current status
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 8 COMPLETE** (2026-09-15). Phases 0–7 ✅. **Next: Phase 9 — writeup**: README leading with the error curve and envelope, `claims.md` generated from `benchmarks.md` and pinned to commits, failure modes published.
+- **Phase:** **Phase 9 in progress** (2026-09-16). Phases 0–8 ✅. Held-out evaluation **done**; remaining: README, `claims.md` regenerated + pinned, `/scope-check`.
+- **⚠⚠ THE HELD-OUT SPLIT BROKE THE HEADLINE CLAIM ([D-025](docs/decisions.md), Rows 9.1–9.7).** The declared envelope — **10–30 m at ≤15% MAPE** — **does not hold on test**: best-per-bin **24.1 / 17.2 / 15.6 / 14.4 %**, both envelope bins missing. Far bins *improved*. This is reported as the result, not repaired into one.
+- **The ruler and the detector both transferred** — test ruler MAE **0.27 m** (val 0.25), detection AP **0.737** (val 0.615, test is *easier*). So the range estimator was handed more and better boxes and still did worse. The failure is the estimator's.
+- **The centre transferred; the tail did not.** Median APE moved 7.5→10.3 and 7.7→8.8, while the mean moved 10.3→18.4 and 12.2→20.3. **MAPE alone described a collapse that never happened to the typical object.** Every range row now carries its median.
+- **Root cause: an ungated pole.** 10 detections of 199 carried **81%** of the worst block's bias; all had box bottoms ~4.7 px below the horizon, where `D = f·h/(v_bottom − v_horizon)` diverges — worst estimate **253 m for an object at 25.8 m**. `min_pixels_below_horizon: 3` was a divide-by-zero check, never a validity check (it permits 398 m at 33% error per pixel). Fixed: abstain past `max_range_m = 50 m`, the envelope D-015 already declared.
+- **Three rival explanations died on measurement** — degraded ruler (no), occlusion (87.9% vs 85.7%, no discrimination), road non-flatness (predicted −0.65 m against an observed +9.08 m). Recorded because the dead ones are the evidence.
+- **The fix does not rescue the claim.** Post-fix test 10–20 m is still 15.8%. **Honest envelope: 20–50 m at ≤13% on both splits**, 10–20 m marginal, near field failing on both. Post-fix numbers are labelled as *not* clean held-out evidence, since the defect was found by inspecting test.
 - **⚠ PHASE 7'S RESULT IS THAT THE METRIC CANNOT BE PRODUCED ([D-024](docs/decisions.md)).** Val is **0.045 h** of exposure holding **2 threat events** below TTC 2 s (11 frames of 8383 annotated), over 21 in-path closing objects, minimum in-path TTC **1.17 s**. A TPR over 2 events is not a rate; 12 false alarms carry a 137–462/h interval. **No TPR, no FP/hour, and no operating point is published.** The held-out test split (1.3 min) is smaller still — this needs staged NCAP-style scenarios or hours of naturalistic driving.
 - **Threat count is set by the corridor definition, not the data**: 2 events at ±1.5 m, 8 at 2.5 m, 84 at 5.0 m — but a 5 m corridor counts oncoming traffic an FCW must *not* warn about.
 - **What Phase 7 does show:** persistence is the strongest lever (3/3 cuts onsets 13→3, false alarms 12→2, for 0.2 s latency); **half of all false alarms are ghost tracks** with no annotated object; the Phase 5 `sigma` deadband can suppress the threat itself (0 of 2 caught).
@@ -186,11 +196,11 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - **TTC is the trustworthy output ([D-022](docs/decisions.md)).** Filter over `u = 1/h` (proportional to range, so exact under constant velocity). `TTC = −u/u̇` is calibration- and prior-free. On val at GT TTC < 3 s: **MAE 0.41 s, median +0.01 s** — unbiased, because the −4.5% box bias cancels in the ratio. Closing speed inherits range error (rel MAE 28 → 78 % by range).
 - **Deadband is a gate, not a smoother.** Without one **54.3 %** of stationary objects fake closing. It never changes a TTC value — only whether one is emitted. sigma@2.0's better headline error was selection: it goes silent on **10.2 %** of imminent threats (GT TTC median 2.15 s). Fixed and sigma are equivalent at matched phantom rates. **Operating point deferred to Phase 7.**
 - **Tracking (Phase 4).** `sort_det` shipped: MOTA 0.284 / IDF1 0.522 / 358 ID switches; association −29 % ID switches, output smoothing discarded ([D-021](docs/decisions.md)).
-- **THE HEADLINE (Phase 3, val, N=6122).** Range MAPE contact-point **22.7 / 10.3 / 12.2 / 18.7 / 24.0 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 / 16.5 %**. **Credible envelope 10–30 m at ≤15% MAPE**; no bin reaches 10%. Curve is U-shaped — worst in the near field.
+- **Phase 3 on val, post-D-025 (N=6122).** Contact-point **21.0 / 10.1 / 10.7 / 11.8 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 %**. The val 30–50 m figure was **18.7% before the gate** — the same pole had been inflating val all along, unnoticed because it never grew large enough to look wrong.
 - **Far-range range error explained ([D-020](docs/decisions.md)): road non-flatness.** Road falls ~10 cm below the assumed 1.655 m plane by 50 m; predicted from geometry with no free parameters, matches observation beyond 20 m to 0.1–0.6 m.
 - **⚠ STILL OPEN: a flat +0.7 m near-field range residual** inside 13 m, ~0.3 m vehicle-specific. Suspects untested: effective horizon row ≠ `cy` · `shrink_p20` on very large boxes · detector bottom-edge placement on close cars.
-- **Verified:** 184 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val); detection AP@0.5 **0.615**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
-- **Known issues:** dev has now pointed the wrong way **three times** (50+ ruler bin, box-bias class mean, tracker ordering) — **dev is for wiring, never conclusions** · tracking metrics self-implemented and raw-tracklet labels, so not leaderboard-comparable · 50+ bins thin throughout.
+- **Verified:** 186 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val) / **0.27 m** (test); detection AP@0.5 **0.615** / **0.737**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
+- **Known issues:** dev has now pointed the wrong way **three times** (50+ ruler bin, box-bias class mean, tracker ordering) — **dev is for wiring, never conclusions**, and D-025 adds that **val was not enough either** · abstention costs coverage: contact-point validity 95% val / 90% test, only **71%** in the 0–10 m test bin, and it is no longer evaluable at 50+ · tracking metrics self-implemented and raw-tracklet labels, so not leaderboard-comparable · 50+ bins thin throughout.
 - **Standing warning:** draft resume bullets describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo** are not this system. Claims get generated from `benchmarks.md` in Phase 9.
 
 ## Project skills (slash commands)
