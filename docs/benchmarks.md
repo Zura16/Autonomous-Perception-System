@@ -451,16 +451,28 @@ Camera assumes a fixed **1.655 m height and zero pitch** ([D-016](decisions.md))
 
 ### Row 3.1 — Error vs range ← **THE HEADLINE**
 
-**contact-point** `D = f·h_cam/(v_bottom − v_horizon)` — valid on 98%
+> **Superseded in part by [Row 9.7](#row-97--the-defect-an-ungated-pole-and-what-closing-it-costs).**
+> The contact-point figures below are the *pre-gate* values this phase shipped.
+> The D-025 abstention gate changed them on val, and the current values are given
+> beneath. Both are kept: the pre-gate column is what Phases 3–8 were built and
+> reasoned on, and deleting it would make the project's own history unreadable.
 
-| bin (m) | N | MAE | MAPE | bias | p95 \|e\| |
-|---|---|---|---|---|---|
-| 0–10 | 1006 | 1.28 | **22.7%** | +1.05 | 2.86 |
-| 10–20 | 2285 | 1.51 | **10.3%** | +0.48 | 3.97 |
-| 20–30 | 1635 | 3.03 | 12.2% | +0.10 | 7.28 |
-| 30–50 | 984 | 7.11 | 18.7% | +0.91 | 22.27 |
-| 50+ | 91 | 13.72 | 24.0% | −5.87 | 30.44 |
-| **all** | **6001** | **2.99** | **14.5%** | +0.45 | 9.80 |
+**contact-point** `D = f·h_cam/(v_bottom − v_horizon)` — valid on 98% pre-gate,
+**95% post-gate**
+
+| bin (m) | N | MAE | MAPE | bias | p95 \|e\| | **MAPE post-gate** |
+|---|---|---|---|---|---|---|
+| 0–10 | 1006 | 1.28 | **22.7%** | +1.05 | 2.86 | **21.0%** |
+| 10–20 | 2285 | 1.51 | **10.3%** | +0.48 | 3.97 | **10.1%** |
+| 20–30 | 1635 | 3.03 | 12.2% | +0.10 | 7.28 | **10.7%** |
+| 30–50 | 984 | 7.11 | 18.7% | +0.91 | 22.27 | **11.8%** |
+| 50+ | 91 | 13.72 | 24.0% | −5.87 | 30.44 | not evaluable¹ |
+| **all** | **6001** | **2.99** | **14.5%** | +0.45 | 9.80 | **12.6%** |
+
+¹ Past 50 m the gate caps every contact-point estimate at the envelope bound, so
+each one is an underestimate by construction (bias −14.27 m). The estimator is
+not evaluable there; that is the honest reading of a declared support limit, not
+a result. Size-prior is unaffected by the gate and its table is unchanged.
 
 **size-prior** `D = f·H_prior/h_box` — valid on 98%
 

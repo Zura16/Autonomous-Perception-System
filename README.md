@@ -28,6 +28,19 @@ error-vs-range curve, graded by a LiDAR ruler whose own error was characterised
 first. That ordering is deliberate — an estimator with no ground truth is a
 decoration.
 
+> ### ⚠ Read this before any number below
+>
+> Phase 9 ran the frozen pipeline once on a **held-out split it had never
+> touched — and the headline claim did not survive.** The operating envelope
+> declared in Phase 3, *10–30 m at ≤15% MAPE*, came back at **17.2%** and
+> **15.6%** on those bins.
+>
+> The Phase 1–8 sections below are left exactly as they were written, because a
+> project that quietly rewrites its earlier claims teaches nothing. Read them as
+> what was believed at the time, and read
+> [**What Phase 9 established**](#what-phase-9-established--the-held-out-split-broke-the-headline)
+> for what survived contact with data that could contradict it.
+
 | Phase | | |
 |---|---|---|
 | 0 | Repo, dataset, calibration, one frame rendered | ✅ |
@@ -39,7 +52,7 @@ decoration.
 | 6 | **Lane detection + departure metric** | ✅ |
 | 7 | **FCW decision layer**: TPR **and FP/hour** | ✅ |
 | 8 | **HUD + top-down view** *(deliberately last)* | ✅ |
-| 9 | Writeup | — |
+| 9 | **Held-out evaluation + writeup** ← *broke the headline* | ◐ |
 
 ## What Phase 1 established
 
@@ -148,6 +161,9 @@ boxes. **val, N = 6122 detections.** MAPE by range bin:
 
 **Credible operating envelope: 10–30 m at ≤15% MAPE.** No range bin achieves
 10%; the best figure anywhere is 10.3% at 10–20 m.
+
+> ⚠ **This is the claim the held-out split refuted.** Kept here as written. See
+> [Phase 9](#what-phase-9-established--the-held-out-split-broke-the-headline).
 
 **The curve is U-shaped, and that is the result.** Error is *worst in the near
 field*, not at range — a collision-warning system least accurate where a
@@ -320,6 +336,90 @@ number derived from two events.
 
 Full context, with N and caveats, in [docs/benchmarks.md](docs/benchmarks.md).
 Every non-obvious choice and why it was made: [docs/decisions.md](docs/decisions.md).
+
+## What Phase 9 established — the held-out split broke the headline
+
+Everything above was measured on `dev` and `val`. Two sequences — 744 frames —
+were fetched, never looked at, and never used to choose a parameter. Phase 9 ran
+the frozen pipeline on them once.
+
+![error vs range, held-out test](docs/figures/range_error_test.png)
+
+**The envelope declared in Phase 3 did not hold.** Best estimator per bin:
+
+| bin | 0–10 m | 10–20 m | 20–30 m | 30–50 m | 50+ m |
+|---|---|---|---|---|---|
+| val *(declared on)* | 22.7% | **10.3%** | **11.0%** | 15.3% | 16.5% |
+| **test** *(held out)* | 24.1% | **17.2%** | **15.6%** | 14.4% | 14.3% |
+
+Both bins the claim rested on missed. The far bins improved.
+
+**It was not the ground truth and not the detector.** The LiDAR ruler came back
+at **0.27 m MAE** against val's 0.25, and detection was *better* on test
+(AP **0.737** against 0.615, recall 93/89/74/61/51%). The estimator was handed
+more boxes and better ones, and did worse. The failure is its own.
+
+**The gap is entirely in the tail.** Reporting the median beside the mean:
+
+| bin | median APE val → test | mean MAPE val → test |
+|---|---|---|
+| 10–20 m | 7.5% → **10.3%** | 10.3% → **18.4%** |
+| 20–30 m | 7.7% → **8.8%** | 12.2% → **20.3%** |
+
+At 20–30 m the median moved 1.1 points and the mean moved 8.1. **The headline
+metric described a collapse that never happened to the typical object** — and
+this project had shipped that metric for six phases.
+
+**What the tail is: ten detections.** In the worst 50-frame block, 10 detections
+of 199 carried **81% of the summed bias**, while the block's median error was
+−1.54 m. All ten had box bottoms ~4.7 px below the horizon row, where
+
+    D = f·h / (v_bottom − v_horizon)
+
+divides by almost nothing. The worst returned **253 m for an object at 25.8 m**.
+
+Three other explanations were tested first and **died on measurement** — a
+degraded ruler, occlusion (a nearer object was present for 87.9% of outliers and
+85.7% of everything else: no discrimination), and the road-non-flatness
+mechanism that had explained the far-range bias in Phase 3 (it predicted
+−0.65 m against an observed **+9.08 m** — wrong sign, an order of magnitude
+short). The dead hypotheses are part of the result.
+
+**The defect was a guard that was never a guard.** `min_pixels_below_horizon: 3`
+reads like a validity check and is a division-by-zero check: it permits a 398 m
+answer at **33% range error per pixel** of box-edge error. The estimator now
+abstains past the 50 m evaluation envelope the project had *already* declared,
+per its own rule that abstaining beats fabricating.
+
+**And the fix does not rescue the claim.** Test 10–20 m is still 15.8%.
+
+| honest envelope | **20–50 m at ≤13% MAPE, on both splits** |
+|---|---|
+| 10–20 m | marginal — 10.1% val, 15.8% test |
+| 0–10 m | fails on both (21.0% / 22.5%) |
+
+The fix does repair **val**, whose 30–50 m error was 18.7% and is 11.8% gated —
+the same pole had been inflating the validation numbers all along, unnoticed
+because it never grew large enough to look wrong. And it costs coverage:
+contact-point now abstains on 10% of test detections and **29% of the 0–10 m
+bin**.
+
+Because the defect was found by *inspecting* the test split, the post-fix test
+numbers are labelled as what they are — not clean held-out evidence — and the
+as-frozen result above stays the headline. Both figures are committed with their
+provenance stamped on them
+([as frozen](docs/figures/range_error_test.png) ·
+[after the fix](docs/figures/range_error_test_gated.png)).
+
+**The finding that outlives all of it.** Five validation sequences spanning
+8.5–12.4% MAPE looked like convergence. One held-out city sequence came back at
+23.3%, and blocks *within* that one sequence ranged from 6.6% to 55.5%. Scene-to-
+scene variation is larger than every effect this project had previously
+measured. A single number for "monocular range error" characterises the mix of
+scenes it was measured on at least as much as the estimator.
+
+Full detail: [Rows 9.1–9.7](docs/benchmarks.md) ·
+[D-025](docs/decisions.md) · [FM-21 to FM-23](docs/failure-modes.md).
 
 ## What the system looks like running
 

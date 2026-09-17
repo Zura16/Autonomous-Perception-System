@@ -548,3 +548,73 @@ so a viewer cannot be the thing that opens the test split before Phase 9.
 **Landed:** `app/replay.py`, `docs/figures/hud_still.jpg`.
 
 **Next:** Phase 9 — the writeup.
+
+---
+
+## 2026-09-16 · Phase 9 — the held-out split, and what it broke
+
+The test drives (`0009`, `0015`) had been on disk since Phase 2 and untouched by
+design. Phase 9 ran the frozen pipeline on them once.
+
+**Before anything could run, a crash.** Both ground-truth harnesses died on
+`drive_0009` frame 177 with `FileNotFoundError`. The drive ships 447 images and
+**443 velodyne scans** — KITTI does not guarantee one scan per image. Added
+`Frame.has_velodyne`, made both harnesses skip *and report* those frames, and
+taught `fetch_kitti.py --check` to count every kept stream rather than images
+alone, so the gap is visible on disk before an evaluation trips over it. A
+silently skipped frame is a silently shrunken denominator.
+
+**Then the result.** The credible operating envelope declared in Phase 3 —
+10–30 m at ≤15% MAPE — **did not hold**. Best-per-bin on test: 24.1 / 17.2 /
+15.6 / 14.4 / 14.3 %, against val's 22.7 / 10.3 / 11.0 / 15.3 / 16.5. Both bins
+the claim rested on missed; the far bins improved.
+
+The ruler transferred (0.27 m MAE vs 0.25) and the detector *improved*
+(AP 0.737 vs 0.615), so the estimator was handed more and better boxes and still
+did worse.
+
+**Four hypotheses, three dead.** Degraded ruler: no. Occlusion: a nearer object
+was present for 87.9% of gross outliers and 85.7% of everything else — no
+discrimination, and the first version of that test was too coarse to say
+anything, which is itself the lesson. Road non-flatness, the mechanism that
+explained the far-range bias in Phase 3: predicted −0.65 m where +9.08 m was
+observed. Wrong sign, an order of magnitude short.
+
+**What it was.** Ten detections of 199 carried 81% of the worst block's bias,
+against a block median of −1.54 m. All had box bottoms ~4.7 px below the horizon,
+where `D = f·h/(v_bottom − v_horizon)` divides by almost nothing; the worst
+returned 253 m for an object at 25.8 m. `min_pixels_below_horizon: 3` had always
+been a division-by-zero check wearing the name of a validity check — it permits a
+398 m answer at 33% range error per pixel. Fixed by abstaining past the 50 m
+envelope D-015 had already declared.
+
+**The fix does not rescue the claim** (test 10–20 m is still 15.8%) and it is not
+clean evidence, because the defect was found by looking at test. Both facts are
+recorded next to the numbers, and the as-frozen result stays the headline. It
+*does* repair val, whose 30–50 m figure was 18.7% and is 11.8% gated — the pole
+had been inflating validation all along, invisible because it never grew large
+enough to look wrong.
+
+**The finding that outlives the fix.** Median APE moved 1–3 points where mean
+MAPE moved 8. This project had reported the mean as its headline for six phases
+and the two had always agreed, because val's tail was thin. Every range row now
+carries its median. Related: five val sequences spanning 8.5–12.4% looked like
+convergence, and blocks *within* one test sequence range from 6.6% to 55.5% —
+scene variation exceeds every effect previously measured here.
+
+**Also landed:** the range-curve figure regenerated from a committed artefact
+(reading the ruler floor from the plotted split's own data, drawing median beside
+mean, stamping provenance on any figure built from a non-default artefact), and
+`claim_check.py`, which audits `claims.md` against benchmark rows and git. Two
+subtleties it now gets right: a claim citing several rows pins to the **latest**
+of their commits, not the earliest — otherwise a claim revised to rest on new
+evidence gets backdated to before that evidence existed; and `Row 3.1–3.2, 9.3`
+cites three rows, where the original regex saw one and left the rest unaudited.
+
+**Landed:** `aps/kitti/dataset.py`, `aps/geometry.py`, `configs/camera.yaml`,
+`tools/plot_range_curve.py`, `tools/claim_check.py`, `tools/fetch_kitti.py`,
+`eval/eval_road_profile.py`, Rows 9.1–9.7, D-025, FM-21–FM-23, C-25–C-29,
+`docs/figures/range_error_{val,test,test_gated}.png`.
+
+**Next:** README scope pass complete; remaining Phase 9 work is the end-to-end
+latency row (8.x) and a final `/quiz` against the four load-bearing components.
