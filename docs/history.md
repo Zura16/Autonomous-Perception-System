@@ -618,3 +618,68 @@ cites three rows, where the original regex saw one and left the rest unaudited.
 
 **Next:** README scope pass complete; remaining Phase 9 work is the end-to-end
 latency row (8.x) and a final `/quiz` against the four load-bearing components.
+
+---
+
+## 2026-09-17 · Phase 9 continued — latency, and a HUD that had outlived its claim
+
+**The last open benchmark row.** `bench/run_bench.py` was listed in CLAUDE.md's
+command table and had never been written, so only *detection* had ever been timed
+and hard rule 10 was open at the pipeline level. Built it, and the pipeline fits:
+**p99 61.91 ms against the 103.56 ms budget, 60% of it**, N=1548 val frames,
+30 warmup excluded, device synchronized inside every timed region. By hard rule
+11 no optimization follows, and that is recorded so it does not get reopened.
+
+Detection (37.6%) and lanes (25.3%) are the whole cost. Tracking, range, TTC and
+the decision layer together are **1.1%** — the geometry that took six phases to
+characterise is free, and the two stages nobody had to think about are the entire
+latency story.
+
+Three things the harness is built to get right, and one it got wrong first:
+
+- **the total is timed, not summed.** Summing per-stage p99s reads 66.31 ms
+  against a measured 61.91 — percentiles are not additive, because stages do not
+  peak on the same frames;
+- **N changed the answer by 37%.** The first run used 300 frames of one drive and
+  reported p99 45.28 ms. Across the full split it is 61.91–64.61. The small
+  number was not miscalculated; it was a percentile estimated from too few frames
+  to contain the stalls it purported to describe. That is Row 1.3's 50+ m bin and
+  Row 9.5's ten detections again, in a third quantity;
+- **the over-budget count does not reproduce.** Two runs of an identical config
+  gave 3 and 7 frames over budget, and a *different stage* spiked each time —
+  which is how they are identified as host scheduling stalls rather than pipeline
+  work. p99 is stable to ±4%, so the count is published as a range;
+- **the first warmup implementation was wrong.** It tried to undo a recording it
+  had already made and failed on the first frame of every stage. Warmup is now a
+  single slice across aligned series. The report also printed the unused
+  `--drive` default while five drives were being measured — a latency row naming
+  the wrong sequence fails hard rule 10 as surely as a missing p99.
+
+**The HUD had outlived its own claim.** `app/replay.py` hardcoded
+`ENVELOPE_M = (10.0, 30.0)` and a matching footer caption, both of which stayed
+on screen after the held-out split withdrew that band. It now reads
+`CredibleEnvelope` from `configs/camera.yaml` and generates the caption from it.
+
+Two real defects surfaced in doing that:
+
+- **the gate was one-sided.** The camera view checked only the upper bound while
+  the top-down panel checked both, so the two panels disagreed about what was
+  "inside" — and the near field, the *worst* range the project measures, was
+  being printed as vouched while 30–50 m values, among the best, were dimmed away;
+- **TTC was being withheld along with range.** The two are measured separately,
+  and TTC is unbiased where it matters precisely because the scale-rate ratio
+  cancels the box bias that drives range error. Gating it on a range criterion
+  suppressed the most trustworthy output in the stack, hardest in the near field
+  where a warning matters most. It is now exempt, declared as `gates_ttc: false`
+  in config so the exemption is a stated decision rather than an omission.
+
+The consequence is published rather than styled away: **the HUD now goes quiet on
+range in the near field**, because that is where the estimator is least
+trustworthy and where a collision warning most needs to be right.
+
+**Landed:** `bench/run_bench.py`, `aps/geometry.py` (`CredibleEnvelope`),
+`configs/camera.yaml`, `app/replay.py`, Rows 8.1–8.4, C-30–C-32, 189 tests.
+
+**Next:** the `/quiz` cold reimplementation of the four load-bearing components
+(range geometry, scale-rate/KF, tracker association, FCW thresholds) — the last
+thing D-001 leaves outstanding before any of this goes on a résumé.
