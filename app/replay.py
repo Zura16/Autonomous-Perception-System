@@ -16,8 +16,16 @@ Three rules govern what it is allowed to draw (CLAUDE.md hard rules 13, 14):
   worse than one that admits a gap.
 
   **Every figure carries its envelope.** Range is annotated against the measured
-  credible band (10-30 m at <=15% MAPE, Row 3.2); values outside it are drawn
-  dimmed, because the project cannot vouch for them.
+  credible band, read from `configs/camera.yaml` (20-50 m at <=13% MAPE, Rows
+  3.1/9.7); values outside it are drawn dimmed and their range withheld, because
+  the project cannot vouch for them. The band moved OUTWARD after the held-out
+  split refuted the earlier val-only 10-30 m figure -- so this HUD now withholds
+  range in the near field, where a collision is most imminent. That is the
+  measurement talking, and it is not styled away.
+
+  TTC is exempt from that gate and says so in the config: it is measured
+  separately and is unbiased at GT TTC < 3 s (D-022). Gating it on a range
+  criterion would hide the most trustworthy number here.
 
   **The decision layer is labelled as what it is.** "AEB REQUEST (logged, not
   actuated)". Monocular, offline, open-loop -- stated on every frame, so a
@@ -37,7 +45,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from aps.detect import Detector  # noqa: E402
 from aps.fcw import FcwConfig, FcwDecider, corridor_range_m, lateral_offset_m  # noqa: E402
-from aps.geometry import CameraModel, range_contact_point, range_size_prior  # noqa: E402
+from aps.geometry import (  # noqa: E402
+    CameraModel,
+    CredibleEnvelope,
+    range_contact_point,
+    range_size_prior,
+)
 from aps.kitti import load_split  # noqa: E402
 from aps.kitti.road import RoadGeometry  # noqa: E402
 from aps.lanes import BevGrid, LaneConfig, LaneEstimate, estimate_lane  # noqa: E402
@@ -47,8 +60,11 @@ from aps.viz import CLASS_COLOURS, DEFAULT_COLOUR, draw_box_2d  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
-# Measured envelope from Row 3.2 -- the band the project can vouch for.
-ENVELOPE_M = (10.0, 30.0)
+# The band the project can vouch for, read from configs/camera.yaml because it
+# is a measured result (Rows 3.1, 9.7) and moved outward when the held-out split
+# refuted the val-only figure. A HUD that hardcodes it goes on vouching for a
+# band the evaluation has withdrawn.
+ENVELOPE = CredibleEnvelope.from_config()
 TOPDOWN_W, TOPDOWN_H = 420, 560
 TOPDOWN_MAX_RANGE_M = 50.0
 TOPDOWN_HALF_WIDTH_M = 12.0
@@ -75,8 +91,8 @@ def draw_topdown(objects: list[dict], cfg: FcwConfig) -> np.ndarray:
         return int(cx + x_m * px_per_m_x), int(cy - z_m * px_per_m_z)
 
     # The credible band, drawn as the only region the project vouches for.
-    top = to_px(0, ENVELOPE_M[1])[1]
-    bottom = to_px(0, ENVELOPE_M[0])[1]
+    top = to_px(0, ENVELOPE.max_range_m)[1]
+    bottom = to_px(0, ENVELOPE.min_range_m)[1]
     band = panel[top:bottom].copy()
     cv2.addWeighted(band, 0.75, np.full_like(band, (40, 70, 40)), 0.25, 0, band)
     panel[top:bottom] = band
@@ -98,7 +114,7 @@ def draw_topdown(objects: list[dict], cfg: FcwConfig) -> np.ndarray:
     for o in objects:
         if not np.isfinite(o["range_m"]):
             continue
-        inside = ENVELOPE_M[0] <= o["range_m"] <= ENVELOPE_M[1]
+        inside = ENVELOPE.contains(o["range_m"])
         colour = RED if o["warning"] else (o["colour"] if inside else GREY)
         p = to_px(o["lateral_m"], min(o["range_m"], TOPDOWN_MAX_RANGE_M))
         cv2.circle(panel, p, 6 if inside else 4, colour, -1 if inside else 1, cv2.LINE_AA)
@@ -120,12 +136,26 @@ def draw_topdown(objects: list[dict], cfg: FcwConfig) -> np.ndarray:
     return panel
 
 
+def _scope_line() -> str:
+    """The caveat text, generated from the envelope rather than retyped.
+
+    The old hardcoded "range credible 10-30 m (<=15% MAPE)" stayed on screen
+    after the held-out split withdrew that band. A caption is a claim, and a
+    claim that cannot follow its measurement will eventually contradict it.
+    """
+    return (
+        f"range credible {ENVELOPE.min_range_m:g}-{ENVELOPE.max_range_m:g} m "
+        f"(<={ENVELOPE.max_mape_pct:g}% MAPE, val AND held-out test) | "
+        "TTC MAE 0.41 s under 3 s | LiDAR = ground truth only, not an input"
+    )
+
+
 def footer(width: int, warning: bool, aeb: bool) -> np.ndarray:
     """The caveat strip. Present on every frame so a screenshot carries its scope."""
     strip = np.full((58, width, 3), 18, dtype=np.uint8)
     cv2.putText(strip, "MONOCULAR CAMERA ONLY - OFFLINE, OPEN-LOOP EVALUATION - NOTHING IS ACTUATED",
                 (12, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.44, WHITE, 1, cv2.LINE_AA)  # fmt: skip
-    cv2.putText(strip, "range credible 10-30 m (<=15% MAPE) | TTC MAE 0.41 s under 3 s | LiDAR = ground truth only, not an input",
+    cv2.putText(strip, _scope_line(),
                 (12, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.38, GREY, 1, cv2.LINE_AA)  # fmt: skip
     if warning:
         cv2.rectangle(strip, (width - 330, 8), (width - 12, 48), (0, 0, 120), -1)
@@ -153,15 +183,25 @@ def build_frame(
             cv2.polylines(canvas, [pts], False, (120, 220, 120), 2, cv2.LINE_AA)
 
     for o in objects:
-        inside = np.isfinite(o["range_m"]) and o["range_m"] <= ENVELOPE_M[1]
+        inside = ENVELOPE.contains(o["range_m"])
         colour = RED if o["warning"] else (o["colour"] if inside else GREY)
         draw_box_2d(canvas, o["box"], "", colour, thickness=2 if inside else 1)
-        # Beyond the credible envelope, draw the box but not the numbers: the
-        # project cannot vouch for those values, and printing them anyway is how
-        # a HUD launders an unsupported figure into a screenshot.
-        if inside:
-            label = f"#{o['track_id']} {_fmt(o['range_m'], ' m')}  TTC {_fmt(o['ttc_s'], ' s')}"
-            draw_box_2d(canvas, o["box"], label, colour, thickness=0)
+        # Outside the credible envelope the RANGE is withheld -- the project
+        # cannot vouch for it, and printing it anyway is how a HUD launders an
+        # unsupported figure into a screenshot.
+        #
+        # TTC is not withheld with it. The two are measured separately, and TTC
+        # is unbiased where it matters (median +0.01 s at GT TTC < 3 s, D-022)
+        # precisely because the scale-rate ratio cancels the box bias that drives
+        # range error. Gating TTC on a range criterion suppressed this stack's
+        # most trustworthy output on the strength of a different quantity's
+        # failure -- and did so hardest in the near field, where a warning
+        # matters most.
+        parts = [f"#{o['track_id']}"]
+        parts.append(_fmt(o["range_m"], " m") if inside else "-- m")
+        if not ENVELOPE.gates_ttc or inside:
+            parts.append(f"TTC {_fmt(o['ttc_s'], ' s')}")
+        draw_box_2d(canvas, o["box"], "  ".join(parts), colour, thickness=0)
 
     panel = draw_topdown(objects, cfg)
     # Scale the camera view to the panel's height rather than padding it: dead

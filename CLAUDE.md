@@ -122,7 +122,9 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Lane departure warning | body-over-line **3/5** (95% CI 23–88%) · false warnings **2/82 (2.4%)** · 8 of 13 rule frames graze the threshold ([D-023](docs/decisions.md)) |
 | **FCW: TPR and FP/hour** | **NOT PUBLISHABLE on this data** — val holds **2 threat events** below TTC 2 s in **0.045 h** of exposure; min in-path TTC 1.17 s ([D-024](docs/decisions.md)) |
 | FCW decision layer, what is measured | persistence 3/3 cuts onsets 13→3 and false alarms 12→2 at TTC 2.0 s for 0.2 s latency · **half of false alarms are ghost tracks** · `sigma` deadband can suppress the threat |
-| Per-stage latency p50/p95/p99 | detection only so far — see above. Track/range/KF/decide not yet measured |
+| **End-to-end latency (M2 MPS, val, N=1548, 30 warmup excl.)** | TOTAL p50 **30.13** · p95 43.47 · p99 **61.91 ms = 60% of budget** · 3–7 frames over budget across runs |
+| Per-stage p99 (same run) | detect **38.91** (37.6%) · lanes **26.24** (25.3%) · track 0.65 · motion+TTC 0.32 · range 0.11 · FCW 0.08 ms. Decode 15.88 ms measured, **not charged** |
+| Latency caveat | summing stage p99s overstates the total by **7.1%** — percentiles are not additive. N=300 understated total p99 by **37%** (Rows 8.2, 8.4) |
 | GT ruler on **held-out test** | MAE **0.27 m**, fail 0.15% — against val's 0.25 m / 0.27%. The instrument transferred |
 | Detection on **held-out test** | AP **0.737** class-agnostic (val 0.615) · recall 93/89/74/61/51% · VRU AP **0.127** on 250 labels |
 | Test suite count | **186** |
@@ -169,19 +171,19 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - [x] **Phase 0 — Repo + dataset + one frame.** KITTI loader, calibration parsed, one frame rendered with boxes. Environment fingerprinted.
 - [x] **Phase 1 — Ground truth harness.** Project LiDAR into the image; per-detection GT range, with the ruler's own error and coverage characterised by range bin.
 - [x] **Phase 2 — Detection baseline.** YOLOv8n zero-shot: AP 0.615 class-agnostic, recall-vs-range measured, latency at 33% of budget at p99. No optimization — nothing missed the budget except five host stalls ([D-012](docs/decisions.md)).
-- [x] **Phase 3 — Monocular range + error-vs-range curve.** ✅ Two estimators, pitch characterised not corrected, envelope **10–30 m at ≤15% MAPE**. Headline artifact landed.
+- [x] **Phase 3 — Monocular range + error-vs-range curve.** ✅ Two estimators, pitch characterised not corrected. Declared envelope **10–30 m at ≤15% MAPE** — later **refuted on held-out test** and replaced by **20–50 m at ≤13%** ([D-025](docs/decisions.md)).
 - [x] **Phase 4 — Tracking.** ✅ IoU baseline vs SORT vs SORT-with-raw-output. Association buys −29% ID switches; canonical SORT's smoothing costs MOTP and is discarded ([D-021](docs/decisions.md)).
 - [x] **Phase 5 — Closing speed + TTC.** ✅ KF over `u = 1/h` (exact under constant velocity), measured noise model, TTC unbiased (MAE 0.41 s < 3 s). Deadband measured as a gate; operating point deferred to Phase 7 ([D-022](docs/decisions.md)).
 - [x] **Phase 6 — Lane detection + departure metric.** ✅ Metric BEV + top-hat + sliding windows on 95 labelled KITTI road frames, parameters frozen before evaluation. Offset MAE 0.18 m; failure set with frames ([D-023](docs/decisions.md)).
 - [x] **Phase 7 — FCW / AEB-request decision layer.** ✅ Built and swept. **TPR/FP-per-hour declined as unpublishable**: 2 threat events in 2.7 minutes ([D-024](docs/decisions.md)). No operating point selected.
-- [x] **Phase 8 — HUD + top-down view.** ✅ `app/replay.py`. Presents measured results only: abstentions stay blank, values outside the 10–30 m envelope are dimmed and unlabelled, scope stated on every frame.
+- [x] **Phase 8 — HUD + top-down view.** ✅ `app/replay.py`. Presents measured results only: abstentions stay blank, values outside the credible envelope are dimmed and their range withheld, scope stated on every frame. The envelope is now **read from `configs/camera.yaml`**, so the HUD follows the measurement instead of a hardcoded band; **TTC is deliberately exempt** from that gate ([D-022](docs/decisions.md)).
 - [ ] **Phase 9 — Writeup.** README leading with the error curve and the operating envelope; `claims.md` generated from `benchmarks.md`; failure modes published, not buried. **Held-out evaluation done — and it broke the headline claim ([D-025](docs/decisions.md)).**
 
 ## Current status
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 9 in progress** (2026-09-16). Phases 0–8 ✅. Held-out evaluation **done**; remaining: README, `claims.md` regenerated + pinned, `/scope-check`.
+- **Phase:** **Phase 9 in progress** (2026-09-17). Phases 0–8 ✅. Held-out evaluation, README, `claims.md` (29 backed + pinned) and `/scope-check` **done**. Remaining: the `/quiz` cold reimplementation of the four load-bearing components.
 - **⚠⚠ THE HELD-OUT SPLIT BROKE THE HEADLINE CLAIM ([D-025](docs/decisions.md), Rows 9.1–9.7).** The declared envelope — **10–30 m at ≤15% MAPE** — **does not hold on test**: best-per-bin **24.1 / 17.2 / 15.6 / 14.4 %**, both envelope bins missing. Far bins *improved*. This is reported as the result, not repaired into one.
 - **The ruler and the detector both transferred** — test ruler MAE **0.27 m** (val 0.25), detection AP **0.737** (val 0.615, test is *easier*). So the range estimator was handed more and better boxes and still did worse. The failure is the estimator's.
 - **The centre transferred; the tail did not.** Median APE moved 7.5→10.3 and 7.7→8.8, while the mean moved 10.3→18.4 and 12.2→20.3. **MAPE alone described a collapse that never happened to the typical object.** Every range row now carries its median.

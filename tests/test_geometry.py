@@ -12,6 +12,7 @@ import pytest
 
 from aps.geometry import (
     CameraModel,
+    CredibleEnvelope,
     box_is_clipped_at_bottom,
     crossover_range_m,
     horizon_row_px,
@@ -294,3 +295,43 @@ def test_crossover_matches_the_published_prediction():
 def test_crossover_is_infinite_without_pitch_error():
     """With perfect pitch the contact-point estimator never loses to the prior."""
     assert crossover_range_m(0.201, 0.0, H_CAM) == float("inf")
+
+
+# ── credible envelope ────────────────────────────────────────────────────────
+
+
+def test_the_envelope_gates_both_ends_not_just_the_far_one():
+    """The near field is OUTSIDE the band, and was being published anyway.
+
+    The HUD checked only the upper bound, so 0-20 m range values -- the worst
+    the project measures, 21-22% MAPE on both splits -- were printed as vouched
+    while 30-50 m values, among the best, were dimmed away.
+    """
+    env = CredibleEnvelope(min_range_m=20.0, max_range_m=50.0, max_mape_pct=13.0, gates_ttc=False)
+    assert not env.contains(8.0)
+    assert not env.contains(19.9)
+    assert env.contains(20.0)
+    assert env.contains(35.0)
+    assert env.contains(50.0)
+    assert not env.contains(50.1)
+
+
+def test_the_envelope_abstains_on_a_missing_range():
+    """An abstention is not 'outside the band' -- both must render blank."""
+    env = CredibleEnvelope(min_range_m=20.0, max_range_m=50.0, max_mape_pct=13.0, gates_ttc=False)
+    assert not env.contains(float("nan"))
+    assert not env.contains(float("inf"))
+
+
+def test_the_shipped_envelope_matches_what_both_splits_support():
+    """Pins the configured band to the measurement that justifies it.
+
+    20-50 m is where val AND held-out test both stay within 13% MAPE (Rows 3.1,
+    9.7). The previous 10-30 m was declared on val alone and did not survive
+    (17.2% at 10-20 m on test), so this guards against a quiet reversion to the
+    friendlier number.
+    """
+    env = CredibleEnvelope.from_config()
+    assert (env.min_range_m, env.max_range_m) == (20.0, 50.0)
+    assert env.max_mape_pct == 13.0
+    assert env.gates_ttc is False, "TTC is measured separately and is not gated on range error"

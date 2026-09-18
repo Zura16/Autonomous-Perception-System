@@ -992,6 +992,89 @@ detector precision, exactly as MOTA was bounded by detector recall (Row 4.4).
 
 ---
 
+# Phase 8 — end-to-end latency
+
+### Row 8.1 — The full pipeline against the sensor budget ← closes hard rule 10
+
+`bench/run_bench.py --split val --warmup 30`. Apple M2 (4P+4E), macOS 26.5.1,
+device **mps**, `yolov8n.pt` at 640 px, **batch 1**, conf 0.25, input 1242×375.
+**N = 1548 frames** across all five val drives; **30 warmup frames excluded**;
+device synchronized inside every timed region. Lane solver **included**.
+
+| stage | mean | p50 | p95 | **p99** | max | p99 as % of 103.56 ms |
+|---|---|---|---|---|---|---|
+| detect | 17.91 | 17.93 | 26.81 | **38.91** | 168.42 | 37.6% |
+| track | 0.20 | 0.19 | 0.38 | 0.65 | 1.55 | 0.6% |
+| range | 0.04 | 0.03 | 0.07 | 0.11 | 0.42 | 0.1% |
+| motion + TTC | 0.10 | 0.09 | 0.20 | 0.32 | 2.70 | 0.3% |
+| FCW decide | 0.02 | 0.02 | 0.04 | 0.08 | 1.01 | 0.1% |
+| lanes | 12.95 | 12.13 | 17.72 | **26.24** | 92.72 | 25.3% |
+| **TOTAL (measured)** | **31.25** | **30.13** | **43.47** | **61.91** | **254.13** | **59.8%** |
+| image decode *(not charged)* | 9.23 | 8.76 | 11.57 | 15.88 | 40.02 | — |
+
+**Verdict: p99 61.91 ms fits the 103.56 ms budget at 60% of it.** By hard rule 11
+no optimization work is justified — optimizing a stage that already fits is
+theatre. Recorded so the decision is on file rather than reopened later.
+
+Image decode is measured but **not charged to the budget**: a deployed system
+receives frames from a sensor, not a PNG decoder. It would otherwise add ~9 ms
+of work the modelled system never does.
+
+**Detection and lanes are the whole cost** — 63% of the budget between them at
+p99, against 1.1% for tracking, range, TTC and the decision layer *combined*.
+The geometry this project spent six phases characterising is free; the two
+stages nobody had to think about are the entire latency story.
+
+### Row 8.2 — Why the total is measured and not summed
+
+| quantity | value |
+|---|---|
+| sum of per-stage p99 | 66.31 ms |
+| **measured total p99** | **61.91 ms** |
+| error from summing | **+7.1%** |
+
+**Percentiles are not additive.** Stages do not peak on the same frames, so
+adding their p99s describes a pipeline that does not exist. Here it overstates
+by 7%; it can understate just as easily when stages are correlated. Total
+latency is timed per frame as its own series.
+
+### Row 8.3 — The tail is where a real-time claim fails, and it is not reproducible
+
+Two runs of the **identical** configuration, N=1548 each:
+
+| | run A | run B |
+|---|---|---|
+| TOTAL p99 | 64.61 ms | 61.91 ms |
+| TOTAL max | 263.83 ms | 254.13 ms |
+| **frames over budget** | **3 (0.19%)** | **7 (0.45%)** |
+| detect max | 78.86 ms | 168.42 ms |
+| lanes max | 182.14 ms | 92.72 ms |
+
+**p99 is stable to ±4%; the over-budget count is not — it more than doubled.**
+Those frames are host scheduling stalls, not pipeline work: the stage that spikes
+even changes between runs. A "frames over budget" figure from a single run is not
+a property of this system, and is reported as a range rather than a number.
+
+This repeats the Phase 2 finding (Row 2.5: 5 of 1450 detection frames over
+budget, max 553 ms) at the pipeline level, and it is the reason a p99 alone is
+not a real-time claim on a general-purpose OS.
+
+### Row 8.4 — Sample size changes the answer
+
+Same pipeline, same machine, different N:
+
+| N | drives | TOTAL p99 | over budget |
+|---|---|---|---|
+| 300 | 1 (`0059`) | **45.28 ms** | 0 |
+| 1548 | 5 (all val) | **61.91–64.61 ms** | 3–7 |
+
+**The 300-frame p99 understated the tail by 37%.** At N=300 the p99 is the
+3rd-worst frame, and the rare host stalls (order 1-in-500) are usually absent
+from the sample entirely. The small-N number was not wrong arithmetic; it was a
+percentile estimated from too few samples to contain the event it was supposed
+to describe — the same failure that Row 1.3's 50+ m bin and Row 9.5's ten
+detections each show in a different quantity.
+
 # Phase 9 — the held-out test split
 
 Drives `0009` (city, 447 frames) and `0015` (road, 297 frames), 744 frames,
@@ -1152,6 +1235,8 @@ the as-frozen result above remains the headline.
 
 ---
 
+---
+
 ## Pending — nothing measured yet
 
 These rows are deliberately empty. A value here that is not a measurement is the
@@ -1159,4 +1244,4 @@ failure mode this file exists to prevent.
 
 | Row | Blocks on |
 |---|---|
-| 8.x — End-to-end latency p50/p95/p99 vs budget | Phase 8 |
+| *(none — Row 8.1 closed the last open row)* | — |

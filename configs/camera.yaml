@@ -78,3 +78,28 @@ contact_point:
   # At 50 m the denominator is 23.9 px and one pixel costs 4.2% -- already the
   # limit of what a 10-15% MAPE claim can absorb. See D-025.
   max_range_m: 50.0
+
+# ── Credible operating envelope ──────────────────────────────────────────────
+# The band where range error stays within the stated bound **on both splits**,
+# not just the one it was developed on. A MEASURED result (Rows 3.1, 9.7), read
+# here rather than hardcoded in the HUD so a display can never vouch for a band
+# the evaluation does not.
+#
+# It moved OUTWARD after D-025: the previous 10-30 m at <=15% was declared on
+# val alone and did not survive the held-out split (17.2% at 10-20 m). The band
+# below holds on val AND test.
+#
+# Note what this means and do not soften it: the near field is NOT in the
+# envelope. A forward-collision system's range is least trustworthy exactly
+# where a collision is most imminent. That is the finding, not a presentation
+# problem to be styled away.
+credible_envelope:
+  min_range_m: 20.0
+  max_range_m: 50.0
+  max_mape_pct: 13.0
+  # TTC is deliberately NOT gated by this band. It is measured separately and
+  # is unbiased where it matters (median +0.01 s at GT TTC < 3 s, D-022),
+  # because the scale-rate ratio cancels the box bias that drives range error.
+  # Blanking TTC on a range criterion would suppress this project's most
+  # trustworthy output on the strength of a different quantity's failure.
+  gates_ttc: false

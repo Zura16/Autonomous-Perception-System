@@ -74,6 +74,42 @@ class CameraModel:
         return float(self.priors[group]["height_std_m"])
 
 
+@dataclass(frozen=True)
+class CredibleEnvelope:
+    """The range band the project vouches for, and what it does NOT cover.
+
+    Deliberately separate from `CameraModel`: that class holds mounting
+    assumptions the estimator consumes, whereas this is a *measured result*
+    about the estimator's error. Mixing them would let a display read an
+    evaluation conclusion as though it were a calibration constant.
+    """
+
+    min_range_m: float
+    max_range_m: float
+    max_mape_pct: float
+    gates_ttc: bool
+
+    @classmethod
+    def from_config(cls, path: Path | None = None) -> CredibleEnvelope:
+        cfg = yaml.safe_load((path or REPO / "configs" / "camera.yaml").read_text())
+        e = cfg["credible_envelope"]
+        return cls(
+            min_range_m=float(e["min_range_m"]),
+            max_range_m=float(e["max_range_m"]),
+            max_mape_pct=float(e["max_mape_pct"]),
+            gates_ttc=bool(e["gates_ttc"]),
+        )
+
+    def contains(self, range_m: float) -> bool:
+        """Whether a range estimate falls inside the vouched band.
+
+        Both bounds, not just the far one. The near field is outside the band
+        (21-22% MAPE on both splits), and checking only the upper bound quietly
+        published exactly the values the evaluation is least able to support.
+        """
+        return bool(np.isfinite(range_m) and self.min_range_m <= range_m <= self.max_range_m)
+
+
 def horizon_row_px(calib: Calibration, pitch_deg: float = 0.0, cam: int = 2) -> float:
     """Image row of the horizon.
 
