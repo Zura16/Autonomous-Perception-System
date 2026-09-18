@@ -421,6 +421,44 @@ scenes it was measured on at least as much as the estimator.
 Full detail: [Rows 9.1–9.7](docs/benchmarks.md) ·
 [D-025](docs/decisions.md) · [FM-21 to FM-23](docs/failure-modes.md).
 
+## What Phase 8 measured — latency against a named budget
+
+The budget is not a round number: KITTI's measured frame interval is
+**103.56 ms** (9.657 Hz), not the documented 10 Hz. Every latency figure here is
+a fraction of that. `bench/run_bench.py`, Apple M2 / MPS, YOLOv8n at 640 px,
+batch 1, **N = 1548 val frames**, 30 warmup frames excluded, device synchronized
+inside every timed region.
+
+| stage | p50 | p95 | **p99** | % of budget |
+|---|---|---|---|---|
+| detect | 17.93 | 26.81 | **38.91** | 37.6% |
+| lanes | 12.13 | 17.72 | **26.24** | 25.3% |
+| track + range + TTC + FCW | 0.33 | 0.69 | 1.16 | **1.1%** |
+| **TOTAL (measured)** | **30.13** | **43.47** | **61.91** | **59.8%** |
+
+**It fits, at 60% of budget, so no optimization was done.** Optimizing a stage
+that already meets its share is theatre, and the decision is recorded so it does
+not get quietly reopened.
+
+Note what the table says about effort: the two stages nobody had to think about
+are the entire latency story, while the geometry that took six phases to
+characterise costs **1.1%**.
+
+Three things that are easy to get wrong here, and are not:
+
+- **The total is timed, not summed.** Summing per-stage p99s gives 66.31 ms
+  against a measured 61.91 — a 7% overstatement, because stages do not peak on
+  the same frames. Percentiles are not additive.
+- **N changed the answer.** A 300-frame run reported p99 45.28 ms; the full
+  1548-frame split reports 61.91. The small sample was not miscalculated, it was
+  a percentile estimated from too few frames to contain the stalls it claimed to
+  describe.
+- **The over-budget count is not reproducible.** Two runs of the identical
+  configuration gave 3 and 7 frames over budget, with a different stage spiking
+  each time. Those are host scheduling stalls, not pipeline work, so it is
+  reported as a range. p99 itself is stable to ±4%. This is why a p99 alone is
+  not a real-time claim on a general-purpose OS.
+
 ## What the system looks like running
 
 ![HUD and top-down view](docs/figures/hud_still.jpg)
@@ -430,11 +468,23 @@ of its own. Three rules govern what it may draw:
 
 - **Abstentions stay blank.** Where an estimator declined, the HUD shows `--`.
   In the frame above, the car ahead reads no TTC because it is not closing.
-- **Values outside the credible envelope are dimmed and unlabelled.** Beyond
-  30 m the boxes are drawn but the numbers are not, because the project cannot
-  vouch for them.
+- **Range outside the credible envelope is withheld.** The box is drawn dimmed,
+  the range is not printed. The band is read from `configs/camera.yaml`, so when
+  the held-out split moved it from 10–30 m to 20–50 m the HUD moved with it —
+  a caption is a claim, and one that cannot follow its measurement will
+  eventually contradict it.
+- **TTC is deliberately exempt from that gate.** It is measured separately and is
+  unbiased where it matters (median +0.01 s under 3 s), because the scale-rate
+  ratio cancels the box bias that drives range error. Withholding it on a range
+  criterion suppressed the most trustworthy number here — hardest in the near
+  field, where a warning matters most.
 - **Scope is stamped on every frame**, so a screenshot cannot be mistaken for
   something it is not.
+
+The honest consequence, stated rather than styled away: **this HUD now withholds
+range in the near field**, because that is where the estimator is least
+trustworthy (21–22% MAPE on both splits) — and the near field is where a
+collision-warning system most needs to be right.
 
 ## Setup
 
