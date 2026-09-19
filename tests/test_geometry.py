@@ -16,6 +16,7 @@ from aps.geometry import (
     box_is_clipped_at_bottom,
     crossover_range_m,
     horizon_row_px,
+    min_supportable_range_m,
     pitch_range_error_frac,
     prior_range_error_frac,
     range_contact_point,
@@ -27,7 +28,10 @@ H_CAM = 1.655
 
 
 def make_camera(
-    height_m: float = H_CAM, pitch_deg: float = 0.0, max_range_m: float = 50.0
+    height_m: float = H_CAM,
+    pitch_deg: float = 0.0,
+    max_range_m: float = 50.0,
+    min_rows_from_bottom: int = 2,
 ) -> CameraModel:
     return CameraModel(
         height_m=height_m,
@@ -37,7 +41,7 @@ def make_camera(
             "vehicle": {"height_m": 1.585, "height_std_m": 0.390},
             "vru": {"height_m": 1.700, "height_std_m": 0.147},
         },
-        min_rows_from_bottom=2,
+        min_rows_from_bottom=min_rows_from_bottom,
         min_pixels_below_horizon=3.0,
         max_range_m=max_range_m,
     )
@@ -335,3 +339,69 @@ def test_the_shipped_envelope_matches_what_both_splits_support():
     assert (env.min_range_m, env.max_range_m) == (20.0, 50.0)
     assert env.max_mape_pct == 13.0
     assert env.gates_ttc is False, "TTC is measured separately and is not gated on range error"
+
+
+# ── the near-field limit (D-026) ─────────────────────────────────────────────
+
+
+def test_min_supportable_range_is_where_the_contact_point_leaves_the_image():
+    """Below D_min the ground contact point is not in the picture at all.
+
+    A contact point at range D lands at row `horizon + fy*h/D`, so it exits an
+    H-row image at `D_min = fy*h/(H - horizon)`. This is a property of the
+    mounting and the sensor, not of the estimator: a camera 1.655 m up cannot
+    see the wheels of a car four metres ahead, and no better algorithm changes
+    that.
+    """
+    calib, camera = make_calib(baseline_m=0.0), make_camera()
+    d_min = min_supportable_range_m(calib, camera)
+    img_h = calib.image_size[2][1]
+    assert d_min == pytest.approx(FY * H_CAM / (img_h - CY))
+    # the contact row at D_min is exactly the last row of the image
+    assert contact_row_for(d_min) == pytest.approx(img_h)
+    # and anything closer projects below it
+    assert contact_row_for(d_min * 0.8) > img_h
+
+
+def test_the_clip_margin_catches_boxes_that_stop_short_of_the_edge():
+    """The D-026 defect, pinned: a 2-row margin missed the objects that matter.
+
+    Boxes for sub-D_min objects sit around y2 = 371 of 375 -- four rows clear of
+    the edge, so a 2-row margin passed them, and the estimator then saturated
+    and over-estimated 100% of the time.
+    """
+    calib = make_calib(baseline_m=0.0)
+    img_h = calib.image_size[2][1]
+    box = np.array([0.0, 100.0, 50.0, img_h - 4])  # the observed failure geometry
+
+    old = make_camera(min_rows_from_bottom=2)
+    assert not box_is_clipped_at_bottom(box, calib, old)
+    assert np.isfinite(range_contact_point(box, calib, old)), "the defect: it answered"
+
+    new = make_camera(min_rows_from_bottom=10)
+    assert box_is_clipped_at_bottom(box, calib, new)
+    assert np.isnan(range_contact_point(box, calib, new))
+    assert np.isnan(range_size_prior(box, calib, new, "vehicle"))
+
+
+def test_the_shipped_clip_margin_is_the_one_val_supports():
+    """Pins the configured margin to the sweep that justifies it.
+
+    2 rows shipped the defect; 10 was chosen on val, where it catches 83% of
+    unsupportable boxes for 0.34% of valid ones. Guards against a quiet revert.
+    """
+    assert CameraModel.from_config().min_rows_from_bottom == 10
+
+
+def test_a_box_well_clear_of_the_edge_is_still_measured():
+    """The gate must not eat the valid population it sits next to.
+
+    Valid objects sit a median 140 px from the edge; the gate costs 0.34% of
+    them. A margin that also swallowed ordinary near boxes would trade one
+    silent error for a silent abstention.
+    """
+    calib = make_calib(baseline_m=0.0)
+    camera = make_camera(min_rows_from_bottom=10)
+    box = np.array([0.0, 100.0, 50.0, contact_row_for(12.0)])
+    assert not box_is_clipped_at_bottom(box, calib, camera)
+    assert range_contact_point(box, calib, camera) == pytest.approx(12.0)

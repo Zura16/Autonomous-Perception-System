@@ -121,6 +121,38 @@ def horizon_row_px(calib: Calibration, pitch_deg: float = 0.0, cam: int = 2) -> 
     return cy - fy * np.tan(np.radians(pitch_deg))
 
 
+def min_supportable_range_m(
+    calib: Calibration, camera: CameraModel, pitch_deg: float | None = None, cam: int = 2
+) -> float:
+    """Closest range whose ground contact point still lands inside the image.
+
+    A contact point at range D projects to row `horizon + fy*h/D`, so it leaves
+    an `H_img`-row image below
+
+        D_min = fy * h_cam / (H_img - horizon)
+
+    which is **5.91 m** for this camera. Closer than that the contact point is
+    not in the picture at all: the box bottom can reach the frame edge and no
+    further, and the estimator saturates there. Measured, sub-D_min estimates
+    cluster at 6.03 m (val) / 6.02 m (test) and are over-estimates 100% of the
+    time on both splits (docs/decisions.md D-026).
+
+    This is a property of the mounting and the sensor, not of the algorithm: a
+    camera 1.655 m up with this field of view cannot see the wheels of a car
+    four metres in front of it. A production stack covers that band with a
+    wider-FOV camera, a lower mount, or radar -- not with a better estimator.
+
+    Not used as a gate, because saturation makes the estimate itself land at or
+    above D_min by construction and so carries no signal. The gate is
+    `box_is_clipped_at_bottom`. This function exists to state the limit, to test
+    it, and to keep the number derived rather than retyped.
+    """
+    _, fy, _, _ = calib.intrinsics(cam)
+    pitch = camera.pitch_deg if pitch_deg is None else pitch_deg
+    horizon = horizon_row_px(calib, pitch, cam)
+    return float(fy * camera.height_m / (calib.image_size[cam][1] - horizon))
+
+
 def box_is_clipped_at_bottom(
     box: np.ndarray, calib: Calibration, camera: CameraModel, cam: int = 2
 ) -> bool:
@@ -134,6 +166,16 @@ def box_is_clipped_at_bottom(
     **46.4% MAPE against 13.6%** for unclipped boxes, biased +1.66 m at close
     range because the clipped bottom edge sits higher than the true contact row.
     They dominate the near-field error (docs/decisions.md D-017).
+
+    The margin matters as much as the test. At 2 rows this caught only boxes
+    literally touching the edge and missed the objects that actually break the
+    near field -- they sit at y2 ~ 371 of 375, four pixels clear, at a true range
+    of ~4 m, below the `min_supportable_range_m` of 5.91 m where the contact
+    point is no longer in the picture. Raised to 10 on val evidence: unsupportable
+    objects sit a median 4 px from the edge against 140 px for valid ones, so the
+    gate catches 83% of them for 0.34% of valid boxes, and val 0-10 m MAPE falls
+    21.0 -> 12.4% (contact-point) and 29.5 -> 19.9% (size-prior) with every other
+    bin untouched (docs/decisions.md D-026).
     """
     height_px = calib.image_size[cam][1]
     return float(box[3]) >= height_px - camera.min_rows_from_bottom

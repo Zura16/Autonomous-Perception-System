@@ -56,10 +56,38 @@ priors:
 
 # ── Contact-point validity ───────────────────────────────────────────────────
 contact_point:
-  # A box bottom is a ground contact point only if the object rests on the road
-  # and the box is not clipped at the image edge. Boxes touching the bottom row
-  # have no visible contact point and are excluded rather than guessed at.
-  min_rows_from_bottom: 2
+  # A box whose bottom edge is within this many rows of the image edge is
+  # treated as clipped, and BOTH estimators abstain on it.
+  #
+  # Was 2, which only caught boxes literally touching the last rows. The
+  # objects that break the near field sit at y2 ~ 371 of 375 -- four pixels
+  # clear, so they passed -- with a true range of ~4 m.
+  #
+  # WHY THEY BREAK. The ground contact point of an object at range D projects
+  # to row cy + f*h/D, which leaves a 375-row image below
+  #
+  #     D_min = f*h / (H_img - cy) = 5.91 m
+  #
+  # so for anything closer the contact point is NOT IN THE PICTURE. The box
+  # bottom can only reach the frame edge, and the estimator saturates: measured
+  # estimates for sub-5.91 m objects cluster at 6.03 m (val) / 6.02 m (test)
+  # against the 5.91 m prediction, and are over-estimates 100% of the time on
+  # both splits. Size-prior fails there too, and slightly worse, because the
+  # same edge truncates the box HEIGHT.
+  #
+  # This cannot be detected from the estimate: saturation puts it at or above
+  # D_min by construction. The observable is the box's distance from the edge,
+  # and the margin covers how far short of the edge the detector regresses a box
+  # for an object running off-frame -- a measured detector property, not a
+  # geometric one.
+  #
+  # SET ON VAL ONLY, then reported on test. The two populations separate
+  # cleanly: unsupportable objects sit a median 4 px from the edge, valid ones
+  # 140 px. At 10 px the gate catches 83% of unsupportable boxes and costs 19 of
+  # 5548 valid ones (0.34%). val 0-10 m MAPE: contact-point 21.0 -> 12.4%,
+  # size-prior 29.5 -> 19.9%; every other bin is untouched (zero boxes dropped).
+  # See D-026.
+  min_rows_from_bottom: 10
   # Below this, the object is at or above the horizon and the range diverges.
   # This is a NUMERICAL floor only -- it stops a division by zero. It is not a
   # statement about where the estimator is trustworthy; `max_range_m` is.

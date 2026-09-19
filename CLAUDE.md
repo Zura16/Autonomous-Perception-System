@@ -103,15 +103,17 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Detection recall vs range (conf 0.25) | **86 / 76 / 65 / 46 / 24 %** · VRU **75 / 69 / 36 / 2 / 0 %** |
 | Detection latency (M2 MPS, 640px, batch 1) | p50 **17.12** · p95 24.75 · p99 **34.01 ms** = 33% of budget · **5/1450 frames over budget**, max 553 ms |
 | **Evaluation envelope** | **0–50 m** — bounded by evidence, not accuracy. Usable N/bin: 430/1142/793/475/**30** ([D-015](docs/decisions.md)) |
-| **Range MAPE by bin** — contact-point (val, post-D-025) | **21.0 / 10.1 / 10.7 / 11.8 %** (MAE 1.15/1.48/2.65/4.36 m) |
-| **Range MAPE by bin** — size-prior (val) | **29.5 / 14.9 / 11.0 / 15.3 %** |
+| **Range MAPE by bin** — contact-point (val, post-D-026) | **12.4 / 10.1 / 10.7 / 11.8 %** |
+| **Range MAPE by bin** — size-prior (val, post-D-026) | **19.9 / 14.9 / 11.0 / 15.3 %** |
+| **Best per bin, both splits (post-D-026)** | val **12.4 / 10.1 / 10.7 / 11.8 %** · test **20.3 / 15.8 / 12.2 / 12.7 %** |
 | **HELD-OUT test, as frozen** | best-per-bin **24.1 / 17.2 / 15.6 / 14.4 %** — **the 10–30 m envelope FAILED** ([D-025](docs/decisions.md)) |
 | **Credible operating envelope** | **20–50 m at ≤13%, on both splits.** 10–20 m is marginal (val 10.1%, test 15.8%); the near field fails on both. The former "10–30 m at ≤15%" did **not** survive held-out data |
 | **Median vs mean APE** (val → test) | 7.5→10.3 / 7.7→8.8 median against 10.3→18.4 / 12.2→20.3 mean. **The centre transfers; the tail does not** |
 | Camera geometry (LiDAR-measured) | height **1.655 m** (std 0.027) · camera-to-road pitch mean +0.150°, \|p95\| **0.715°** |
 | Detector box height bias (val, 5254 pairs) | **−4.5% overall · −7.1% at 0–10 m** · bottom edge −4.8 px near. A bias, not jitter ([D-018](docs/decisions.md)) |
 | Far-range error cause | **road non-flatness** — road 10 cm below the assumed plane by 50 m; explains most of the bias beyond 20 m ([D-020](docs/decisions.md)) |
-| Near-field error cause | **UNIDENTIFIED** — flat +0.7 m residual inside 13 m; ~0.3 m vehicle-specific, ~0.4 m common |
+| Near-field error cause | **LARGELY IDENTIFIED: the image edge** ([D-026](docs/decisions.md)). Below **D_min = f·h/(H_img−cy) = 5.91 m** the contact point projects below the frame; estimates saturate at 6.03 m (val) / 6.02 m (test) against a 5.91 m prediction, **100% over-estimates**. Both estimators fail there. A **+0.60 m residual at 5.91–13 m remains open** |
+| Near-field after the D-026 gate | 0–10 m MAPE **21.0 → 12.4% (val)**, 22.5 → 20.3% (test). Coverage cost: contact-point validity in that bin falls to **68% / 52%** |
 | Closing-speed error vs GT (val, no deadband) | rel MAE **28 / 32 / 51 / 78 %** by bin 0–10…30–50 m — inherits range error ([D-022](docs/decisions.md)) |
 | **TTC error where it matters (GT TTC < 3 s)** | MAE **0.41 s**, median **+0.01 s** (unbiased), rel 30%, p90 1.02 s — common subset N=1930 |
 | Phantom closing (relatively stationary) | **54.3%** no deadband · 11.9% fixed@0.05 · 2.6% sigma@2.0 — synthetic model predicted 54.2 / 10.2 |
@@ -127,7 +129,7 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Latency caveat | summing stage p99s overstates the total by **7.1%** — percentiles are not additive. N=300 understated total p99 by **37%** (Rows 8.2, 8.4) |
 | GT ruler on **held-out test** | MAE **0.27 m**, fail 0.15% — against val's 0.25 m / 0.27%. The instrument transferred |
 | Detection on **held-out test** | AP **0.737** class-agnostic (val 0.615) · recall 93/89/74/61/51% · VRU AP **0.127** on 250 labels |
-| Test suite count | **186** |
+| Test suite count | **193** |
 
 ## Common commands (run from repo root)
 
@@ -201,7 +203,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - **Phase 3 on val, post-D-025 (N=6122).** Contact-point **21.0 / 10.1 / 10.7 / 11.8 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 %**. The val 30–50 m figure was **18.7% before the gate** — the same pole had been inflating val all along, unnoticed because it never grew large enough to look wrong.
 - **Far-range range error explained ([D-020](docs/decisions.md)): road non-flatness.** Road falls ~10 cm below the assumed 1.655 m plane by 50 m; predicted from geometry with no free parameters, matches observation beyond 20 m to 0.1–0.6 m.
 - **⚠ STILL OPEN: a flat +0.7 m near-field range residual** inside 13 m, ~0.3 m vehicle-specific. Suspects untested: effective horizon row ≠ `cy` · `shrink_p20` on very large boxes · detector bottom-edge placement on close cars.
-- **Verified:** 186 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val) / **0.27 m** (test); detection AP@0.5 **0.615** / **0.737**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
+- **Verified:** 193 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val) / **0.27 m** (test); detection AP@0.5 **0.615** / **0.737**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
 - **Known issues:** dev has now pointed the wrong way **three times** (50+ ruler bin, box-bias class mean, tracker ordering) — **dev is for wiring, never conclusions**, and D-025 adds that **val was not enough either** · abstention costs coverage: contact-point validity 95% val / 90% test, only **71%** in the 0–10 m test bin, and it is no longer evaluable at 50+ · tracking metrics self-implemented and raw-tracklet labels, so not leaderboard-comparable · 50+ bins thin throughout.
 - **Standing warning:** draft resume bullets describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo** are not this system. Claims get generated from `benchmarks.md` in Phase 9.
 

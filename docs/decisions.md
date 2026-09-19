@@ -1276,6 +1276,130 @@ as the median."
 
 ---
 
+## D-026 · The near-field residual is the image edge: below 5.91 m the contact point is not in the picture · 2026-09-19 · Active
+
+**Decision.** `min_rows_from_bottom` goes from **2 to 10**, so both estimators
+abstain on boxes whose bottom edge is within 10 rows of the image edge. This
+closes the near-field error source that had been open since Phase 3.
+
+**The quantity that explains it, derived with no free parameters.** A ground
+contact point at range D projects to row `horizon + f·h/D`, which leaves a
+375-row image below
+
+    D_min = f·h / (H_img − cy) = 721.5377 × 1.655 / (375 − 172.854) = **5.91 m**
+
+Closer than that, **the contact point is not in the picture at all.** The box
+bottom can reach the frame edge and no further, so the estimator *saturates*.
+
+**What the data says, on both splits:**
+
+| | val | test |
+|---|---|---|
+| detections with true range < 5.91 m | 261 (26% of the 0–10 m bin) | 81 (20%) |
+| **over-estimated** | **100%** | **100%** |
+| median error | +1.91 m | +1.75 m |
+| their estimates cluster at | **6.03 m** | **6.02 m** |
+| *predicted saturation* | **5.91 m** | **5.91 m** |
+
+Predicted 5.91, measured 6.03 and 6.02. Nothing was fitted. This is the same
+standard [D-020](#d-020) met for the far field, now for the near.
+
+**Size-prior fails there too, and worse** — 58.8% MAPE against contact-point's
+49.2% on val. I expected it to be immune, since `D = f·H/h` contains no ground
+plane. It is not, and the reason is the same edge: an object running off the
+bottom of the frame has its box *height* truncated as well, so `h` shrinks and
+the range inflates. One boundary, two distinct mechanisms, both estimators.
+
+**So this is not a tuning problem, it is a field-of-view limit.** A camera
+mounted 1.655 m up with this FOV cannot see the wheels of a car four metres in
+front of it. No better estimator recovers that band. A production stack covers
+it with a wider-FOV camera, a lower mount, or radar — which is a concrete
+instance of why production AEB fuses sensors, rather than an abstract one.
+
+**Why the gate reads the box edge and not the estimate.** Saturation puts the
+estimate *at or above* D_min by construction, so the returned value carries no
+signal that anything went wrong — unlike [D-025](#d-025), where the pole
+produced visibly absurd 369 m answers. The only observable is the box's distance
+from the image edge. The margin covers how far short of the edge the detector
+regresses a box for an off-frame object, which is a **measured detector
+property**, not a geometric one — hence a swept threshold rather than a derived
+constant.
+
+**The threshold, set on val only and then reported on test** (the [D-013](#d-013)
+method). The two populations separate cleanly: unsupportable objects sit a
+median **4 px** from the edge, valid ones **140 px**.
+
+| margin px | catches | costs (valid) | val 0–10 m MAPE |
+|---|---|---|---|
+| 2 *(shipped)* | 0% | 0 | 21.0% |
+| 4 | 49% | 10 | 15.9% |
+| 8 | 80% | 18 | 12.6% |
+| **10** | **83%** | **19 of 5548 (0.34%)** | **12.4%** |
+| 20 | 93% | 56 | 12.4% |
+
+MAPE plateaus at 10; past it the gate only costs valid boxes. Effect on val:
+contact-point 0–10 m **21.0 → 12.4%**, size-prior **29.5 → 19.9%**, and **every
+other bin is untouched — zero boxes dropped at 10–50 m.** A guard that only
+moves the population it was designed for is the strongest evidence it is the
+right guard.
+
+**Measured effect of the change, both splits:**
+
+| 0–10 m MAPE | val before | val after | test before | test after |
+|---|---|---|---|---|
+| contact-point | 21.0% | **12.4%** | 22.5% | **20.3%** |
+| size-prior | 29.5% | **19.9%** | 28.0% | **23.3%** |
+| valid (coverage) | 89% | 68% | 71% | 52% |
+
+**The prediction generalised; the gate only partly did, and that is the honest
+headline of this entry.** val improves 8.6 points, test 2.2. The reason is
+leakage: a 10 px margin catches 83% of sub-D_min boxes, and the 17% that slip
+through are *far worse on test* — 19 surviving objects at **82% MAPE**, carrying
+**99%** of that bin's summed bias, against 44 at 32% on val.
+
+The margin is **not** being raised to close that. It was set on val and the val
+sweep plateaus at 10 (margin 20 catches 93% but costs 56 valid boxes instead of
+19, for identical MAPE). Raising it now would be tuning on the held-out split —
+the precise error [D-025](#d-025) was written to avoid committing twice.
+
+Closing the leak properly needs a better observable than distance-from-edge,
+because a detector can stop its box well short of the frame. The untested
+candidate is box *shape*: a vehicle running off the bottom of the image has an
+anomalous height-to-width ratio for its class. Untested, and labelled as such.
+
+**Coverage is the real price.** Contact-point validity in the 0–10 m bin falls
+to **68% (val) / 52% (test)**. Combined with the [D-025](#d-025) far gate, the
+estimator now declines roughly half of all near-field objects. For a
+forward-collision system that is a serious statement, not a footnote: the band
+where a warning matters most is the band it most often refuses to measure.
+Whether abstention beats a saturated answer there is a Phase 7 question about
+the decision layer, and it is **not settled by this entry**.
+
+**What this does NOT close.** The charter's *"+0.7 m near-field residual"*
+survives, isolated and smaller: between 5.91 and 13 m the bias is **+0.60 m
+(val) / +0.54 m (test)**, still unexplained. What changed is that it is no
+longer entangled with a saturation artefact three times its size. The remaining
+suspects narrow to detector bottom-edge placement on close vehicles
+([D-018](#d-018) measured −4.8 px there) and the effective horizon row.
+
+**Provenance, unlike D-025.** The margin was swept on **val only**, and test was
+used purely to confirm the prediction it never informed. The 6.02 m saturation
+figure on test is therefore a genuine held-out check of a number derived before
+it was looked at.
+
+**Interview version.** "My worst range bin was the near field — 21% error inside
+10 metres, on a collision-warning system, which is the worst possible place for
+it. It turned out not to be an estimator problem at all. A camera 1.65 m up
+can't see the wheels of a car four metres ahead: the contact point falls below
+the bottom of the frame, so range saturates. I predicted the saturation point
+from geometry at 5.91 m with nothing fitted, and measured it at 6.03 on
+validation and 6.02 on a held-out split. Both estimators fail there — the
+size-prior one slightly worse, because the same edge truncates the box height.
+So the fix is to abstain, and the real fix in a product is a wider lens, a lower
+mount, or radar. That is one concrete reason production AEB fuses sensors."
+
+---
+
 ## Open questions
 
 | Question | Blocks | Notes |

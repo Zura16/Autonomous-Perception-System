@@ -1237,6 +1237,82 @@ the as-frozen result above remains the headline.
 
 ---
 
+# Phase 9 follow-on — the near-field limit
+
+### Row 9.8 — D_min: where the contact point leaves the image
+
+Derived, no free parameters: `D_min = f·h/(H_img − cy) = 721.5377 × 1.655 /
+(375 − 172.854)` = **5.91 m**. Below it an object's ground contact point
+projects *below the image*, so the box bottom saturates at the frame edge.
+
+| | val | test |
+|---|---|---|
+| detections with true range < 5.91 m | 261 (26% of 0–10 m bin) | 81 (20%) |
+| **over-estimated** | **100%** | **100%** |
+| median error | +1.91 m | +1.75 m |
+| **their estimates cluster at** | **6.03 m** | **6.02 m** |
+| *predicted saturation* | *5.91 m* | *5.91 m* |
+
+Predicted 5.91, measured 6.03 / 6.02, nothing fitted — the standard Row 3.9 set
+for the far field, now met for the near. The test column is a genuine held-out
+check: the prediction was derived and the gate swept on val before test was read.
+
+**Size-prior fails there too, and worse** (58.8% vs contact-point's 49.2% on
+val) — the same edge truncates the box *height*, so `h` shrinks and `D = f·H/h`
+inflates. One boundary, two mechanisms, both estimators. **This is a
+field-of-view limit, not an estimator defect**: a camera 1.655 m up cannot see
+the wheels of a car 4 m ahead.
+
+### Row 9.9 — The clip margin, swept on val
+
+Sub-D_min boxes sit a median **4 px** from the image edge; valid boxes **140 px**.
+
+| margin px | catches | costs (valid) | val 0–10 m MAPE |
+|---|---|---|---|
+| 2 *(as shipped)* | 0% | 0 | 21.0% |
+| 4 | 49% | 10 | 15.9% |
+| 8 | 80% | 18 | 12.6% |
+| **10 ← selected** | **83%** | **19 of 5548 (0.34%)** | **12.4%** |
+| 16 | 89% | 28 | 12.4% |
+| 20 | 93% | 56 | 12.4% |
+
+MAPE plateaus at 10. Selected on **val only**; test was used to check, never to
+choose.
+
+### Row 9.10 — Effect, and where it stops working
+
+| 0–10 m MAPE | val before | val after | test before | test after |
+|---|---|---|---|---|
+| contact-point | 21.0% | **12.4%** | 22.5% | **20.3%** |
+| size-prior | 29.5% | **19.9%** | 28.0% | **23.3%** |
+| coverage (valid) | 89% | **68%** | 71% | **52%** |
+
+**Every other bin is untouched — zero boxes dropped at 10–50 m.** A guard that
+moves only the population it was designed for is the strongest evidence it is
+the right guard.
+
+**But the benefit does not transfer as well as the prediction did.** val gains
+8.6 points, test 2.2. A 10 px margin catches 83%, and the 17% that leak are far
+worse on test: **19 surviving sub-D_min objects at 82% MAPE, carrying 99% of
+that bin's summed bias**, against 44 at 32% on val. The margin is deliberately
+**not** raised to fix this — that would be tuning on the held-out split.
+
+Best estimator per bin, current state of the project:
+
+| bin (m) | 0–10 | 10–20 | 20–30 | 30–50 |
+|---|---|---|---|---|
+| **val** | 12.4% | 10.1% | 10.7% | 11.8% |
+| **test** | 20.3% | 15.8% | 12.2% | 12.7% |
+
+The near field remains the worst bin on both splits and stays outside the
+credible envelope. What changed is that most of it is now *explained*.
+
+**Residual still open:** between 5.91 and 13 m the contact-point bias is
+**+0.60 m (val) / +0.54 m (test)** — the charter's long-standing near-field
+residual, now isolated from a saturation artefact three times its size.
+
+---
+
 ## Pending — nothing measured yet
 
 These rows are deliberately empty. A value here that is not a measurement is the
