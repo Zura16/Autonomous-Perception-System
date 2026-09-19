@@ -418,7 +418,50 @@ scene variation is larger than every effect this project had previously
 measured. A single number for "monocular range error" characterises the mix of
 scenes it was measured on at least as much as the estimator.
 
-Full detail: [Rows 9.1–9.7](docs/benchmarks.md) ·
+### The near field, finally explained
+
+The worst bin was always 0–10 m — 21% error on a collision-warning system, in
+the band where a collision is most imminent. It had been open since Phase 3 and
+attributed to "something unidentified."
+
+It is the edge of the image. A ground contact point at range D projects to row
+`cy + f·h/D`, which leaves a 375-row frame below
+
+    D_min = f·h / (H_img − cy) = **5.91 m**
+
+Closer than that, **the contact point is not in the picture**. The box bottom
+reaches the frame edge and stops, so range saturates:
+
+| | val | test *(held out)* |
+|---|---|---|
+| objects closer than 5.91 m | 261 | 81 |
+| **over-estimated** | **100%** | **100%** |
+| **their estimates cluster at** | **6.03 m** | **6.02 m** |
+| *predicted, nothing fitted* | *5.91 m* | *5.91 m* |
+
+**The size-prior estimator fails there too, and slightly worse** — which I did
+not expect, because `D = f·H/h` contains no ground plane. The same edge truncates
+the box *height*, so `h` shrinks and the range inflates. One boundary, two
+mechanisms, both estimators.
+
+**So this is a field-of-view limit, not an estimator defect.** A camera mounted
+1.655 m up cannot see the wheels of a car four metres in front of it, and no
+better algorithm recovers that band — a wider lens, a lower mount, or radar
+does. It is a concrete instance of why production AEB fuses sensors, rather than
+an abstract one.
+
+Fixing the guard (clip margin 2 → 10 px, swept on **validation only**) cuts val
+0–10 m error **21.0 → 12.4%** with every other bin untouched. Two honest
+caveats: the fix transfers worse than the prediction did — test gains only 2.2
+points, because 17% of affected boxes leak past the margin and the survivors are
+worse there — and it costs coverage, with near-field range now declined on 32%
+of val objects and 48% of test. For an FCW, the band that matters most is the
+band it most often refuses to measure.
+
+A **+0.60 m residual between 5.91 and 13 m survives** and is still unexplained —
+now isolated from a saturation artefact three times its size.
+
+Full detail: [Rows 9.1–9.10](docs/benchmarks.md) ·
 [D-025](docs/decisions.md) · [FM-21 to FM-23](docs/failure-modes.md).
 
 ## What Phase 8 measured — latency against a named budget

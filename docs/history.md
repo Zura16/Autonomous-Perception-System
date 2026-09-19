@@ -683,3 +683,65 @@ trustworthy and where a collision warning most needs to be right.
 **Next:** the `/quiz` cold reimplementation of the four load-bearing components
 (range geometry, scale-rate/KF, tracker association, FCW thresholds) — the last
 thing D-001 leaves outstanding before any of this goes on a résumé.
+
+---
+
+## 2026-09-19 · The near-field residual, closed by geometry
+
+The last unexplained error source in the project, open since Phase 3 and
+recorded in the charter for six phases as "UNIDENTIFIED — flat +0.7 m residual."
+
+**A false start worth recording.** The first diagnostic compared the observed
+box-bottom "deficit" against the pixel shift "needed" to explain the bias, and
+showed a 6–13 px gap in the near field. There is no gap: the two are
+algebraically identical per object (both equal `f·h·(1/t − 1/p)`), verified to
+1e-14. The apparent gap came from comparing a median-of-differences with a
+difference-of-medians — the project's own standing warning, walked into while
+using it.
+
+**What the real decomposition showed.** Label boxes sit near the flat-ground
+prediction (+5.8 px val, −3.3 px test — sign flips, so not systematic), and the
+LiDAR ruler agrees with the independent 3D labels to 0.13–0.21 m in *every* bin,
+which kills the "shrink_p20 breaks on very large boxes" suspect outright. But the
+worst near-field detections had box bottoms at row **371 of 375** and a true
+range of **~4 m**, and were over-estimates **100%** of the time.
+
+**The cause.** A contact point at range D lands at `cy + f·h/D`, which leaves a
+375-row image below `D_min = f·h/(H_img − cy)` = **5.91 m**. Closer than that the
+contact point is not in the picture, the box bottom saturates at the frame edge,
+and range cannot read below ~5.9 m. Predicted 5.91 with nothing fitted; measured
+**6.03 m (val) / 6.02 m (test)**.
+
+**Size-prior fails there too, and worse** (58.8% vs 49.2%), which I had expected
+to be immune since it contains no ground plane. The same edge truncates box
+*height*. One boundary, two mechanisms.
+
+So it is a **field-of-view limit, not an estimator defect** — and a concrete
+answer to why production AEB fuses sensors.
+
+**The fix and its limits.** The guard must read the box's distance from the edge,
+not the estimate: unlike D-025's pole, saturation produces no absurd value to
+catch. `min_rows_from_bottom` 2 → 10, swept on **val only** (sub-D_min boxes sit
+4 px from the edge, valid ones 140 px; 10 px catches 83% for 0.34% of valid
+boxes). val 0–10 m MAPE **21.0 → 12.4%**, size-prior 29.5 → 19.9%, **zero boxes
+dropped at 10–50 m**.
+
+Two things reported rather than smoothed:
+
+- **the prediction generalised; the fix only partly did.** test gains 2.2 points
+  against val's 8.6, because the 17% of boxes that leak past the margin are much
+  worse there — 19 survivors at 82% MAPE carrying 99% of the bin's bias. The
+  margin was **not** retuned on test. Having made that error once in D-025,
+  making it again knowingly would be worse;
+- **coverage is the price.** Near-field range is now declined on 32% of val
+  objects and 48% of test. The band where a warning matters most is the band the
+  estimator most often refuses to measure, and whether that beats a saturated
+  answer is a decision-layer question this does not settle.
+
+**Still open:** +0.60 m (val) / +0.54 m (test) between 5.91 and 13 m — the
+original residual, now isolated and a third of its apparent size.
+
+**Landed:** `aps/geometry.py` (`min_supportable_range_m`), `configs/camera.yaml`,
+Rows 9.8–9.10, D-026, C-33–C-35, 193 tests.
+
+**Next:** the `/quiz` cold reimplementation — the last item D-001 leaves open.
