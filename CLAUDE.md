@@ -114,7 +114,7 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Far-range error cause | **road non-flatness** — road 10 cm below the assumed plane by 50 m; explains most of the bias beyond 20 m ([D-020](docs/decisions.md)) |
 | Near-field error cause | **LARGELY IDENTIFIED: the image edge** ([D-026](docs/decisions.md)). Below **D_min = f·h/(H_img−cy) = 5.91 m** the contact point projects below the frame; estimates saturate at 6.03 m (val) / 6.02 m (test) against a 5.91 m prediction, **100% over-estimates**. Both estimators fail there. A **+0.60 m residual at 5.91–13 m remains open** |
 | Near-field after the D-026 gate | 0–10 m MAPE **21.0 → 12.4% (val)**, 22.5 → 20.3% (test). Coverage cost: contact-point validity in that bin falls to **68% / 52%** |
-| Closing-speed error vs GT (val, no deadband) | rel MAE **28 / 32 / 51 / 78 %** by bin 0–10…30–50 m — inherits range error ([D-022](docs/decisions.md)) |
+| Closing-speed error vs GT (val, no deadband, post-D-025/026) | rel MAE **30 / 32 / 50 / 66 %** by bin 0–10…30–50 m — inherits range error, so the gates moved it ([D-022](docs/decisions.md), Row 5.5) |
 | **TTC error where it matters (GT TTC < 3 s)** | MAE **0.41 s**, median **+0.01 s** (unbiased), rel 30%, p90 1.02 s — common subset N=1930 |
 | Phantom closing (relatively stationary) | **54.3%** no deadband · 11.9% fixed@0.05 · 2.6% sigma@2.0 — synthetic model predicted 54.2 / 10.2 |
 | Imminent threats silenced (GT TTC < 3 s) | none 1.2% · fixed 1.6% · **sigma 10.2%** — deadband operating point deferred to Phase 7 |
@@ -149,21 +149,29 @@ python tools/render_frame.py --drive 2011_09_26_drive_0013 --frame 20 \
 python eval/eval_detection.py --split val                      # AP, recall-vs-range, latency
 python eval/eval_box_quality.py --split val                   # detector box vs label box, per object
 python eval/eval_road_profile.py --split val                  # real road vs the assumed flat plane
-python eval/eval_range.py    --split val --bins 10,20,30,50   # → error-vs-range curve
+python eval/eval_range.py    --split val                       # → error-vs-range curve (bins are fixed)
 python eval/eval_tracking.py --split val                       # iou vs sort vs sort_det
 python eval/eval_ttc.py      --split val                      # TTC, closing speed, phantom rate
-python eval/eval_fcw.py      --split val --ttc-threshold 2.0  # TPR + FP/hour
+python eval/eval_fcw.py      --split val                       # sweeps TTC thresholds; TPR + FP/hour
 python eval/eval_lane.py --render 8                          # lanes on KITTI road um_lane + failure set
 
 # ── Benchmark (latency; writes a fully-contextualized row)
-python bench/run_bench.py --warmup 50 --iters 500 --report p50,p95,p99
+python bench/run_bench.py --split val --warmup 30              # every stage, p50/p95/p99 vs budget
+python bench/run_bench.py --drive 2011_09_26_drive_0059 --frames 300   # one drive, quicker
 
 # ── Replay / visualize (Phase 8 — the demo, not the evidence)
 python app/replay.py --drive 2011_09_26_drive_0059 --frames 0 200 --lanes --out artifacts/replay.mp4
 python app/replay.py --drive 2011_09_26_drive_0059 --still 96 --lanes --out docs/figures/hud_still.jpg
 
+# ── Writeup artifacts (Phase 9)
+python tools/plot_range_curve.py --split val                   # regenerate the headline figure
+python tools/claim_check.py                                    # audit claims.md; --pin fills hashes
+
 # ── Tests & lint
 python -m pytest tests/ && ruff check . && black --check .
+
+# NOTE: tests/test_documented_commands.py executes this table against each
+# script's argparse. If you change a flag, this file fails until it agrees.
 ```
 
 ## Milestones
@@ -197,7 +205,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - **What Phase 7 does show:** persistence is the strongest lever (3/3 cuts onsets 13→3, false alarms 12→2, for 0.2 s latency); **half of all false alarms are ghost tracks** with no annotated object; the Phase 5 `sigma` deadband can suppress the threat itself (0 of 2 caught).
 - **Lanes ([D-023](docs/decisions.md)).** KITTI raw has no lane labels, so scored on the road benchmark's 95 `um_lane` frames; parameters committed before first evaluation (`27904fe`). Detection 97.9 %; offset MAE **0.18 m** excluding 2 lane-straddling frames (0.26 m with them); width bias +0.17 m, predicted beforehand from marking-centre vs lane-edge convention. Fixed nominal camera costs a distance-growing lateral bias (+0.08 → +0.26 m).
 - **Two ~4 m lane errors were lane-identity disagreements**: the car straddled the line, the solver found the line being crossed and warned correctly. **Departure warning: 3/5 body-over-line frames (CI 23–88 %), 2.4 % false warnings**; 8 of 13 rule frames graze the threshold by < 9 cm, so a per-frame hit rate there is a coin flip.
-- **TTC is the trustworthy output ([D-022](docs/decisions.md)).** Filter over `u = 1/h` (proportional to range, so exact under constant velocity). `TTC = −u/u̇` is calibration- and prior-free. On val at GT TTC < 3 s: **MAE 0.41 s, median +0.01 s** — unbiased, because the −4.5% box bias cancels in the ratio. Closing speed inherits range error (rel MAE 28 → 78 % by range).
+- **TTC is the trustworthy output ([D-022](docs/decisions.md)).** Filter over `u = 1/h` (proportional to range, so exact under constant velocity). `TTC = −u/u̇` is calibration- and prior-free. On val at GT TTC < 3 s: **MAE 0.41 s, median +0.01 s** — unbiased, because the −4.5% box bias cancels in the ratio. Closing speed inherits range error (rel MAE 30 → 66 % by range) and **moved when the range gates changed** — the coupled-stages rule, concretely (Row 5.5).
 - **Deadband is a gate, not a smoother.** Without one **54.3 %** of stationary objects fake closing. It never changes a TTC value — only whether one is emitted. sigma@2.0's better headline error was selection: it goes silent on **10.2 %** of imminent threats (GT TTC median 2.15 s). Fixed and sigma are equivalent at matched phantom rates. **Operating point deferred to Phase 7.**
 - **Tracking (Phase 4).** `sort_det` shipped: MOTA 0.284 / IDF1 0.522 / 358 ID switches; association −29 % ID switches, output smoothing discarded ([D-021](docs/decisions.md)).
 - **Phase 3 on val, post-D-025 (N=6122).** Contact-point **21.0 / 10.1 / 10.7 / 11.8 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 %**. The val 30–50 m figure was **18.7% before the gate** — the same pole had been inflating val all along, unnoticed because it never grew large enough to look wrong.

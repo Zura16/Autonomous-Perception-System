@@ -799,16 +799,32 @@ phantom rate. That trade is not made here; Phase 7 makes it against FP/hour.
 `closing speed = −D_est/TTC`, so every Phase 3 range error propagates in.
 No deadband, frames where GT and estimate both say closing:
 
-| bin (m) | N | median error | MAE | rel MAE |
-|---|---|---|---|---|
-| 0–10 | 661 | −0.74 m/s | 1.88 m/s | 28% |
-| 10–20 | 1132 | −0.34 m/s | 2.35 m/s | 32% |
-| 20–30 | 680 | +0.94 m/s | 4.04 m/s | 51% |
-| 30–50 | 621 | +1.38 m/s | 6.72 m/s | 78% |
+> **Re-measured 2026-09-19 after D-025 and D-026.** Closing speed consumes
+> `D_est`, so the two range gates propagate into it — the only Phase 5/7 figure
+> that moved. TTC did not (it never touches range), and the Phase 7 rows are
+> unchanged. Both versions are kept: the original is what Phases 5–8 reasoned on.
 
-**Closing speed is roughly 2.5× worse than TTC in relative terms beyond 20 m**,
-because TTC is calibration-free and closing speed is not. For a warning system
-this favours deciding on TTC and reporting closing speed as context.
+| bin (m) | N | median error | MAE | rel MAE | **rel MAE (post-gates)** |
+|---|---|---|---|---|---|
+| 0–10 | 661 → 508 | −0.74 → −0.80 m/s | 1.88 → 1.94 m/s | 28% | **30%** |
+| 10–20 | 1132 | −0.34 m/s | 2.35 m/s | 32% | **32%** |
+| 20–30 | 680 → 677 | +0.94 → +0.96 m/s | 4.04 → 3.90 m/s | 51% | **50%** |
+| 30–50 | 621 → 574 | +1.38 → +1.51 m/s | 6.72 → 5.55 m/s | 78% | **66%** |
+
+The 30–50 m bin improves 12 points, tracking D-025's repair of far-range range
+error (18.7 → 11.8% MAPE) exactly as a derived quantity should. The near bin
+worsens slightly because D-026 removes the *saturated* short estimates, which
+were biased toward reporting objects as further away and therefore closing more
+slowly — removing them uncovers error rather than adding it.
+
+**Closing speed remains roughly 2× worse than TTC in relative terms beyond
+20 m**, because TTC is calibration-free and closing speed is not. For a warning
+system this favours deciding on TTC and reporting closing speed as context.
+
+**This row is the concrete case for the charter's "stages are coupled" rule:** a
+validity gate in the range estimator, changed for reasons that had nothing to do
+with velocity, moved a Phase 5 number by 12 points. Every re-run after a
+geometry change has to include the stages downstream of it.
 
 ---
 

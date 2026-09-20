@@ -120,6 +120,15 @@ def main() -> int:
         ap.error("--artifact requires --stamp naming what that artefact is")
 
     src = args.artifact or REPO / "artifacts" / f"range_eval_{args.split}.npz"
+    if not Path(src).is_file():
+        # `artifacts/` is intentionally untracked, so on a fresh clone this is
+        # the first thing a reader hits. Say what to run, the way
+        # RawDrive.open names the fetch command, rather than dumping a
+        # FileNotFoundError from inside numpy.
+        raise SystemExit(
+            f"no evaluation artefact at {src}\n"
+            f"generate it with:  python eval/eval_range.py --split {args.split}"
+        )
     d = np.load(src, allow_pickle=True)
     truth = d["gt_range"]
     centres = [(lo + hi) / 2 for lo, hi in BINS]
