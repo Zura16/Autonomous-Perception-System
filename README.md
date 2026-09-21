@@ -537,7 +537,7 @@ collision-warning system most needs to be right.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[detect,dev]"          # detect = torch + ultralytics (~2 GB)
 
 python tools/fetch_kitti.py --split dev val   # ~4 GB, resumable, prunes unused sensors
 python tools/fetch_kitti.py --check           # verify
@@ -545,6 +545,23 @@ python tools/fetch_kitti.py --check           # verify
 python tools/build_range_gt.py --split val    # characterise the ruler
 python -m pytest tests/ && ruff check . && black --check .
 ```
+
+**The `detect` extra is separate on purpose**, and the earlier `.[dev]`-only
+instruction here was wrong. With `.[dev]` alone — no torch, no ultralytics —
+these run to completion: the full test suite, the LiDAR ground-truth harness
+(`build_range_gt.py`), `eval_road_profile`, `eval_lane`, `render_frame`,
+`plot_range_curve`, `claim_check`, `audit_labels` and `fetch_kitti`.
+
+Anything that puts an image through YOLO needs `detect`: `eval_detection`,
+`eval_range`, `eval_ttc`, `eval_tracking`, `eval_fcw`, `eval_box_quality`,
+`app/replay.py`, `bench/run_bench.py`. They still *import* and answer `--help`
+without it — `aps/detect.py` imports `ultralytics` lazily inside
+`Detector.__init__` — and fail when a detector is first constructed. Verified by
+blocking the modules and running each entry point.
+
+The split is deliberate: the ruler is built and verified before the estimator
+exists (hard rule 1), so it should not need the estimator's 2 GB of
+dependencies to run.
 
 The dataset is not committed; `tools/fetch_kitti.py` reproduces it exactly and
 records URLs, byte counts, and SHA-256 in `data/kitti/MANIFEST.json`.
