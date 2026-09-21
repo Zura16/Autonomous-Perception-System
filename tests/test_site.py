@@ -98,7 +98,21 @@ def test_the_page_does_not_call_a_backend_that_does_not_exist():
     code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
     for dead in ("127.0.0.1", "localhost", "/api/", "/video_feed"):
         assert dead not in code, f"site/app.js still references {dead!r}"
-    assert "fetch(" not in code, "the evidence page is static; it fetches nothing"
+
+    # The page may fetch its OWN exported data -- that is the replay player
+    # reading site/data/*.json, which ships with the page. What it must never do
+    # is reach off-origin or to a service. An earlier version of this test
+    # banned `fetch(` outright, which would have blocked the honest use along
+    # with the dishonest one.
+    for call in re.findall(r"fetch\(\s*([^)]+)", code):
+        assert "http://" not in call and "https://" not in call, (
+            f"site/app.js fetches an absolute URL: {call.strip()[:60]} -- "
+            "the page must depend on nothing but itself"
+        )
+        assert "DATA" in call or "data/" in call, (
+            f"unexpected fetch target {call.strip()[:60]}; only the exported "
+            "replay data under site/data/ may be loaded"
+        )
 
 
 def test_the_page_states_the_scope():
@@ -157,3 +171,112 @@ def test_images_carry_alt_text():
     """A figure without alt text is unreadable to anyone using a screen reader."""
     for tag in re.findall(r"<img[^>]*>", site_text()):
         assert 'alt="' in tag and 'alt=""' not in tag, f"missing alt text: {tag[:70]}"
+
+
+# ── the exported replay ──────────────────────────────────────────────────────
+
+REPLAY = sorted((SITE / "data").glob("*/telemetry.json"))
+
+
+def test_a_replay_is_exported():
+    assert REPLAY, "site/data/<drive>/telemetry.json is missing; run tools/export_replay.py"
+
+
+@pytest.mark.parametrize("path", REPLAY, ids=lambda p: p.parent.name)
+def test_replay_frames_match_the_telemetry(path):
+    """One image per telemetry record, or the player drifts out of sync.
+
+    A missing frame would silently shift every subsequent reading onto the
+    wrong picture -- the viewer would see correct numbers against the wrong
+    moment, which is worse than a gap.
+    """
+    import json
+
+    meta = json.loads((path.parent / "meta.json").read_text())
+    telemetry = json.loads(path.read_text())
+    images = sorted(path.parent.glob("*.jpg"))
+    assert len(telemetry) == meta["frames"] == len(images)
+    for i in range(len(images)):
+        assert (path.parent / f"{i:04d}.jpg").is_file(), f"frame {i} missing"
+
+
+@pytest.mark.parametrize("path", REPLAY, ids=lambda p: p.parent.name)
+def test_abstentions_survive_serialisation_as_null(path):
+    """`--` must reach the browser as null, never as 0.
+
+    json.dumps writes bare NaN, which is invalid JSON and which JSON.parse
+    rejects; substituting 0.0 would turn "the estimator declined" into "the
+    estimator said zero", which is the fabrication hard rule 14 forbids,
+    laundered through a serialiser. The exported clip must actually contain
+    some abstentions, or this proves nothing.
+    """
+    import json
+
+    raw = path.read_text()
+    assert "NaN" not in raw, "invalid JSON: NaN leaked into the export"
+    assert "Infinity" not in raw
+
+    telemetry = json.loads(raw)
+    declined = sum(1 for f in telemetry for o in f["objects"] if o["range_m"] is None)
+    assert declined > 0, "no abstentions in the clip -- it cannot demonstrate the rule"
+
+    for f in telemetry:
+        for o in f["objects"]:
+            for key in ("range_m", "ttc_s", "lateral_m"):
+                assert o[key] is None or isinstance(o[key], (int, float))
+
+
+@pytest.mark.parametrize("path", REPLAY, ids=lambda p: p.parent.name)
+def test_the_exported_envelope_matches_the_shipped_config(path):
+    """The clip records the band it was exported under; it must be current."""
+    import json
+
+    from aps.geometry import CredibleEnvelope
+
+    meta = json.loads((path.parent / "meta.json").read_text())
+    env = CredibleEnvelope.from_config()
+    assert meta["envelope_m"] == [env.min_range_m, env.max_range_m], (
+        "the exported replay was made under a different operating envelope; "
+        "re-run tools/export_replay.py"
+    )
+    assert meta["ttc_gated_by_envelope"] is False
+
+
+@pytest.mark.parametrize("path", REPLAY, ids=lambda p: p.parent.name)
+def test_in_envelope_flag_agrees_with_the_envelope(path):
+    """The flag the player styles on must not contradict the recorded band."""
+    import json
+
+    meta = json.loads((path.parent / "meta.json").read_text())
+    lo, hi = meta["envelope_m"]
+    for f in json.loads(path.read_text()):
+        for o in f["objects"]:
+            expected = o["range_m"] is not None and lo <= o["range_m"] <= hi
+            assert o["in_envelope"] is expected, (
+                f"frame {f['frame']} track {o['id']}: range {o['range_m']} "
+                f"flagged in_envelope={o['in_envelope']} against band {lo}-{hi}"
+            )
+
+
+@pytest.mark.parametrize("path", REPLAY, ids=lambda p: p.parent.name)
+def test_the_replay_is_small_enough_to_serve(path):
+    """GitHub Pages is a static host, not a CDN for a video archive."""
+    mb = sum(f.stat().st_size for f in path.parent.iterdir()) / 1e6
+    assert mb < 40, f"{path.parent.name} is {mb:.1f} MB; reduce --frames or --width"
+
+
+def test_the_player_points_at_a_drive_that_was_actually_exported():
+    """`app.js` hardcodes a drive; `export_replay.py` takes it as a flag.
+
+    Exporting a different clip without editing the player leaves a page whose
+    every frame request 404s, and the only symptom is a spinner that never
+    clears. Cheap to check, invisible to catch by eye.
+    """
+    js = (SITE / "app.js").read_text()
+    m = re.search(r'const DRIVE = "([^"]+)"', js)
+    assert m, "site/app.js no longer declares DRIVE"
+    exported = {p.name for p in (SITE / "data").iterdir() if p.is_dir()}
+    assert m.group(1) in exported, (
+        f"the player expects {m.group(1)!r} but site/data holds {sorted(exported)}. "
+        "Re-run tools/export_replay.py for that drive, or update DRIVE."
+    )

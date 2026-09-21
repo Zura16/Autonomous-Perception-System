@@ -252,24 +252,55 @@
             </div>
         </div>
 
-        <!-- What the system looks like -->
-        <div class="hud-monitor border-glow-card">
+        <!-- Interactive replay -->
+        <div class="hud-monitor border-glow-card" id="replay">
             <span class="edge-light"></span>
             <div class="border-glow-inner">
                 <div class="card-header">
-                    <span class="card-header-dot"></span>
-                    <h3>What it looks like running</h3>
+                    <span class="card-header-dot dot-live"></span>
+                    <h3>Run the pipeline — offline replay</h3>
                 </div>
-                <figure>
-                    <img src="figures/hud_still.jpg" alt="Heads-up display over a KITTI frame with tracked vehicles labelled by range and time-to-collision, alongside a metric top-down panel showing the credible range band." loading="lazy">
-                </figure>
                 <p>
-                    The replay presents results measured in earlier phases and adds no estimate of
-                    its own. Where an estimator declined, it prints <code>--</code> rather than a
-                    guess. Range outside the credible band is withheld entirely — which means
-                    <strong>it goes quiet in the near field</strong>, where a warning matters most.
-                    That is the measurement talking, and it is not styled away.
+                    Every frame below was produced by <code>app/replay.py</code> over KITTI
+                    <span id="meta-drive">drive_0084</span>, composited by the same code the project
+                    ships. <strong>This is replay of measured output, not live inference</strong> —
+                    the system is offline and open-loop by design, so there is nothing to stream and
+                    nothing to actuate. Scrub to frame 168 and the warning fires.
                 </p>
+
+                <div class="replay-stage">
+                    <img id="replay-frame" alt="Replayed perception frame: camera view with tracked vehicles labelled by range and time-to-collision, and a metric top-down panel." loading="eager">
+                    <div id="replay-loading" class="replay-loading"><span id="loading-text">loading frames…</span></div>
+                </div>
+
+                <div class="replay-controls">
+                    <button id="replay-play" class="btn btn-control" aria-label="Play replay">▶ Play</button>
+                    <input id="replay-scrub" class="replay-scrub" type="range" min="0" value="0" step="1" aria-label="Scrub through replay frames">
+                    <span id="replay-counter" class="replay-counter">0 / 0</span>
+                </div>
+
+                <div id="replay-banner" class="replay-banner" hidden></div>
+
+                <div class="replay-panels">
+                    <div class="replay-panel">
+                        <span class="control-label">Tracked objects, this frame</span>
+                        <div class="table-scroll">
+                            <table class="data-table" id="replay-table">
+                                <thead><tr><th>track</th><th>class</th><th>range</th><th>TTC</th><th>lateral</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="replay-panel">
+                        <span class="control-label">Reading it</span>
+                        <ul class="scope-list">
+                            <li><code>--</code> means the estimator <strong>declined</strong>, never a guess</li>
+                            <li>Range outside <b id="meta-envelope">20–50 m</b> is withheld and the box dimmed</li>
+                            <li>TTC is <strong>not</strong> gated on range — it is measured separately and is unbiased under 3 s</li>
+                            <li>About <b id="meta-abstain">15%</b> of object-frames here carry no range at all</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
 
