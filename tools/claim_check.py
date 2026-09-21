@@ -90,6 +90,25 @@ def commit_for_claim(refs: list[str]) -> tuple[str | None, list[str]]:
     return max(found, key=_commit_time), []
 
 
+def dangling_references(rows: set[str]) -> list[str]:
+    """Every `Row N.M` cited anywhere in the docs must exist in benchmarks.md.
+
+    Added after D-025 was found citing a Row 1.7 that did not exist -- it meant
+    Row 9.1. Nothing caught it, because the claim audit only checked the rows
+    cited by *claims*, and prose elsewhere cites rows too. A reference to a
+    missing row is the same failure as an unbacked claim, one file over.
+    """
+    problems = []
+    targets = sorted(REPO.glob("docs/*.md")) + [REPO / "README.md", REPO / "CLAUDE.md"]
+    for doc in targets:
+        if not doc.is_file():
+            continue
+        missing = {m for m in re.findall(r"Row\s+(\d+\.\d+)", doc.read_text()) if m not in rows}
+        for ref in sorted(missing):
+            problems.append(f"{doc.name}: cites Row {ref}, absent from benchmarks.md")
+    return problems
+
+
 def audit(pin: bool) -> int:
     rows = benchmark_rows()
     lines = CLAIMS.read_text().split("\n")
@@ -138,6 +157,8 @@ def audit(pin: bool) -> int:
 
     if pin:
         CLAIMS.write_text("\n".join(lines))
+
+    problems += dangling_references(rows)
 
     print(f"\nchecked {checked} claims against {len(rows)} benchmark rows")
     if problems:

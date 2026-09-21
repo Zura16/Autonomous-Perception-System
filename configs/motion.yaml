@@ -55,4 +55,9 @@ filter:
 ttc:
   # Reporting thresholds only. The OPERATING threshold for FCW is a Phase 7
   # decision, set against a measured TPR and FP/hour -- not chosen here.
-  report_below_s: 3.0   # "TTC error where it matters" (CLAUDE.md reference table)
+  # The horizons "TTC error where it matters" is reported at, headline first.
+  # Was a lone 3.0 that NOTHING read while eval_ttc.py hardcoded (3, 6, 10) --
+  # the D-017 bug exactly: a config key that looks operative, a magic number in
+  # a .py file doing the real work, and no way to tell them apart by reading
+  # either file. tests/test_configs.py now fails if a key here goes unread.
+  report_below_s: [3.0, 6.0, 10.0]

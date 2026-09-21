@@ -129,7 +129,7 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Latency caveat | summing stage p99s overstates the total by **7.1%** — percentiles are not additive. N=300 understated total p99 by **37%** (Rows 8.2, 8.4) |
 | GT ruler on **held-out test** | MAE **0.27 m**, fail 0.15% — against val's 0.25 m / 0.27%. The instrument transferred |
 | Detection on **held-out test** | AP **0.737** class-agnostic (val 0.615) · recall 93/89/74/61/51% · VRU AP **0.127** on 250 labels |
-| Test suite count | **193** |
+| Test suite count | **246** |
 
 ## Common commands (run from repo root)
 
@@ -193,7 +193,8 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 
 > Keep SHORT (≤ 15 lines). `/end-session` updates it; the narrative goes to `docs/history.md`.
 
-- **Phase:** **Phase 9 in progress** (2026-09-17). Phases 0–8 ✅. Held-out evaluation, README, `claims.md` (29 backed + pinned) and `/scope-check` **done**. Remaining: the `/quiz` cold reimplementation of the four load-bearing components.
+- **Phase:** **Phase 9 essentially complete** (2026-09-21). Phases 0–8 ✅. Held-out evaluation, README, `claims.md` (35 backed + pinned), `/scope-check`, **end-to-end latency (Row 8.1)** and the **near-field cause (D-026)** all done. **Zero open benchmark rows.** Remaining: the `/quiz` cold reimplementation of the four load-bearing components ([D-001](docs/decisions.md)), and CI.
+- **System audited end to end (2026-09-19/21), not just documented.** All 16 documented commands execute; every eval re-run and checked against its recorded row; video replay renders; every committed figure regenerates from current code. Eight defects found and fixed — see [history](docs/history.md). Three new guard tests make those classes non-recurring: documented commands are executed against each script's argparse, every config key must be read or declared inert, and `claim_check` now catches dangling `Row N.M` references anywhere in the docs.
 - **⚠⚠ THE HELD-OUT SPLIT BROKE THE HEADLINE CLAIM ([D-025](docs/decisions.md), Rows 9.1–9.7).** The declared envelope — **10–30 m at ≤15% MAPE** — **does not hold on test**: best-per-bin **24.1 / 17.2 / 15.6 / 14.4 %**, both envelope bins missing. Far bins *improved*. This is reported as the result, not repaired into one.
 - **The ruler and the detector both transferred** — test ruler MAE **0.27 m** (val 0.25), detection AP **0.737** (val 0.615, test is *easier*). So the range estimator was handed more and better boxes and still did worse. The failure is the estimator's.
 - **The centre transferred; the tail did not.** Median APE moved 7.5→10.3 and 7.7→8.8, while the mean moved 10.3→18.4 and 12.2→20.3. **MAPE alone described a collapse that never happened to the typical object.** Every range row now carries its median.
@@ -211,7 +212,7 @@ Ordering is deliberate: **the ruler is built first, the dashboard last.**
 - **Phase 3 on val, post-D-025 (N=6122).** Contact-point **21.0 / 10.1 / 10.7 / 11.8 %**; size-prior **29.5 / 14.9 / 11.0 / 15.3 %**. The val 30–50 m figure was **18.7% before the gate** — the same pole had been inflating val all along, unnoticed because it never grew large enough to look wrong.
 - **Far-range range error explained ([D-020](docs/decisions.md)): road non-flatness.** Road falls ~10 cm below the assumed 1.655 m plane by 50 m; predicted from geometry with no free parameters, matches observation beyond 20 m to 0.1–0.6 m.
 - **⚠ STILL OPEN: a flat +0.7 m near-field range residual** inside 13 m, ~0.3 m vehicle-specific. Suspects untested: effective horizon row ≠ `cy` · `shrink_p20` on very large boxes · detector bottom-edge placement on close cars.
-- **Verified:** 193 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val) / **0.27 m** (test); detection AP@0.5 **0.615** / **0.737**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
+- **Verified:** 246 tests, ruff + black clean. Ground-truth ruler MAE **0.25 m** (val) / **0.27 m** (test); detection AP@0.5 **0.615** / **0.737**; detection latency p99 34.01 ms = 33% of the 103.56 ms budget.
 - **Known issues:** dev has now pointed the wrong way **three times** (50+ ruler bin, box-bias class mean, tracker ordering) — **dev is for wiring, never conclusions**, and D-025 adds that **val was not enough either** · abstention costs coverage: contact-point validity 95% val / 90% test, only **71%** in the 0–10 m test bin, and it is no longer evaluable at 50+ · tracking metrics self-implemented and raw-tracklet labels, so not leaderboard-comparable · 50+ bins thin throughout.
 - **Standing warning:** draft resume bullets describing **Camera-LiDAR fusion in C++/CUDA with TensorRT and ROS/Gazebo** are not this system. Claims get generated from `benchmarks.md` in Phase 9.
 

@@ -476,7 +476,7 @@ inside every timed region.
 |---|---|---|---|---|
 | detect | 17.93 | 26.81 | **38.91** | 37.6% |
 | lanes | 12.13 | 17.72 | **26.24** | 25.3% |
-| track + range + TTC + FCW | 0.33 | 0.69 | 1.16 | **1.1%** |
+| track + range + TTC + FCW *(measured together)* | 0.34 | 0.68 | 1.28 | **1.2%** |
 | **TOTAL (measured)** | **30.13** | **43.47** | **61.91** | **59.8%** |
 
 **It fits, at 60% of budget, so no optimization was done.** Optimizing a stage
@@ -491,7 +491,11 @@ Three things that are easy to get wrong here, and are not:
 
 - **The total is timed, not summed.** Summing per-stage p99s gives 66.31 ms
   against a measured 61.91 — a 7% overstatement, because stages do not peak on
-  the same frames. Percentiles are not additive.
+  the same frames. Percentiles are not additive, and the error runs both ways:
+  the four cheap stages above are *correlated* (all scale with object count), so
+  summing their p99s **understates** their combined p99 by 9% — 1.17 against a
+  measured 1.28. An earlier draft of this table printed the summed figure, three
+  paragraphs above the rule forbidding it.
 - **N changed the answer.** A 300-frame run reported p99 45.28 ms; the full
   1548-frame split reports 61.91. The small sample was not miscalculated, it was
   a percentile estimated from too few frames to contain the stalls it claimed to
@@ -507,7 +511,7 @@ Three things that are easy to get wrong here, and are not:
 ![HUD and top-down view](docs/figures/hud_still.jpg)
 
 `app/replay.py` presents results measured in earlier phases and adds no estimate
-of its own. Three rules govern what it may draw:
+of its own. Four rules govern what it may draw:
 
 - **Abstentions stay blank.** Where an estimator declined, the HUD shows `--`.
   In the frame above, the car ahead reads no TTC because it is not closing.

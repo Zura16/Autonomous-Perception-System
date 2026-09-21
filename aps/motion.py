@@ -60,6 +60,10 @@ class MotionConfig:
     deadband_inv_ttc: float  # |1/TTC| below this is declared not-closing
     deadband_sigmas: float  # n-sigma significance required on u̇
     min_updates: int  # filter outputs nothing before this many observations
+    # Reporting only -- never touches the filter, so it carries a default and
+    # sits last: constructing a MotionConfig by hand should not require naming a
+    # field that cannot change any estimate.
+    report_below_s: tuple[float, ...] = (3.0, 6.0, 10.0)
 
     @classmethod
     def from_config(cls, path: Path | None = None) -> MotionConfig:
@@ -70,6 +74,7 @@ class MotionConfig:
             far_range_px=float(cfg["measurement"]["far_range_px"]),
             rel_accel_sigma=float(cfg["process"]["rel_accel_sigma"]),
             deadband_inv_ttc=float(cfg["deadband"]["inv_ttc"]),
+            report_below_s=tuple(float(x) for x in cfg["ttc"]["report_below_s"]),
             deadband_sigmas=float(cfg["deadband"]["sigmas"]),
             min_updates=int(cfg["filter"]["min_updates"]),
         )

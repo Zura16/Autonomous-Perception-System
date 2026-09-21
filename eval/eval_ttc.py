@@ -123,7 +123,7 @@ def _boxes_scores(dets: Detections) -> tuple[np.ndarray, np.ndarray]:
     return dets.boxes, dets.scores
 
 
-def report(d: dict, split: str) -> None:
+def report(d: dict, split: str, cfg: MotionConfig) -> None:
     gt_r, gt_v = d["gt_range"], d["gt_speed"]
     has_gt = np.isfinite(gt_r) & np.isfinite(gt_v)
     gt_ttc = np.where(gt_v < 0, -gt_r / np.where(gt_v < 0, gt_v, -1), np.inf)
@@ -176,7 +176,7 @@ def report(d: dict, split: str) -> None:
     for db in DEADBANDS:
         est_t = d[f"{db}_ttc"]
         flag = d[f"{db}_closing"].astype(bool)
-        for horizon in (3.0, 6.0, 10.0):
+        for horizon in cfg.report_below_s:
             pop = has_gt & mature & (gt_ttc < horizon)
             if pop.sum() < 10:
                 print(f"  {db:<10}{f'<{horizon:g}s':<9}{int(pop.sum()):>6}   -- too few --")
@@ -208,7 +208,7 @@ def main() -> int:
     if len(d.get("gt_range", [])) == 0:
         print("no tracks")
         return 1
-    report(d, args.split)
+    report(d, args.split, MotionConfig.from_config())
     out = REPO / "artifacts" / f"ttc_{args.split}.npz"
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out, **d)

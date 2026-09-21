@@ -1196,7 +1196,7 @@ for. Everything below is diagnosis, and none of it is licensed to replace it.
 three were killed by measurement:
 
 1. **The ruler degraded.** No. Gated ruler MAE on test is **0.27 m** against
-   val's 0.25 m, failure rate 0.15% against 0.27% ([Row 1.7](benchmarks.md)).
+   val's 0.25 m, failure rate 0.15% against 0.27% ([Row 9.1](benchmarks.md)).
    The instrument transferred.
 2. **The estimator is uniformly worse on test.** No — and this is where pooling
    would have lied. **Medians barely moved** (10–20 m contact-point: val 7.5%

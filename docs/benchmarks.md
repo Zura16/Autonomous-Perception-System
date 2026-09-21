@@ -116,6 +116,29 @@ near face ([D-003](decisions.md)).
 the trade bought deliberately. **Every estimator collapses beyond 50 m**, which
 Row 1.3 explains and Row 1.6 fixes.
 
+### Row 1.7 — Why occlusion disqualifies a box (the measurement behind the gate)
+
+Dev split, the same LiDAR-in-box estimator scored against labelled 3D boxes,
+stratified by the annotator's occlusion flag:
+
+| annotator's occlusion flag | N | MAE |
+|---|---|---|
+| 0 — fully visible | 227 | **0.10 m** |
+| −1 — unset | 33 | 0.28 m |
+| 1 — partly occluded | 22 | 1.33 m |
+| **2 — fully occluded** | 79 | **11.86 m** |
+
+Pooled over all of them the "ruler" reads **MAE 3.19 m, p95 25 m** — which would
+have been *quietly* useless, since a ±3 m ruler comfortably hides the ±3 m
+monocular errors it exists to measure. A box around an object you cannot see
+contains the **occluder's** surface, so the estimate is a confident measurement
+of the wrong object. This is the evidence for the usable-tier gate in Row 1.2
+and for hard rule 14 ([D-010](decisions.md)).
+
+Recorded here because it had lived only in `decisions.md` while the README and
+claim C-2 quoted it — a number doing load-bearing work outside the file that is
+supposed to be the only source of numbers.
+
 ### Row 1.2 — Ground-truth coverage, val split
 
 What fraction of labelled objects can be ground-truthed **at all**.
@@ -1048,6 +1071,19 @@ stages nobody had to think about are the entire latency story.
 | sum of per-stage p99 | 66.31 ms |
 | **measured total p99** | **61.91 ms** |
 | error from summing | **+7.1%** |
+
+And the error runs **both ways**. Track + range + motion/TTC + FCW, the four
+cheap stages, all scale with object count and therefore peak on the *same*
+frames — correlated, where detect and lanes are not:
+
+| track+range+TTC+FCW | p50 | p95 | **p99** | max |
+|---|---|---|---|---|
+| **measured per frame** | 0.34 | 0.68 | **1.28** | 3.98 |
+| summed from stage p99s | 0.34 | — | 1.17 | — |
+
+Summing **understates** here by 9%, having overstated by 7% for the whole
+pipeline. There is no safe direction to round in, which is why the total is
+always timed.
 
 **Percentiles are not additive.** Stages do not peak on the same frames, so
 adding their p99s describes a pipeline that does not exist. Here it overstates
