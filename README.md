@@ -474,12 +474,12 @@ inside every timed region.
 
 | stage | p50 | p95 | **p99** | % of budget |
 |---|---|---|---|---|
-| detect | 17.93 | 26.81 | **38.91** | 37.6% |
-| lanes | 12.13 | 17.72 | **26.24** | 25.3% |
-| track + range + TTC + FCW *(measured together)* | 0.34 | 0.68 | 1.28 | **1.2%** |
-| **TOTAL (measured)** | **30.13** | **43.47** | **61.91** | **59.8%** |
+| detect | 17.56 | 25.94 | **38.20** | 36.9% |
+| lanes | 11.83 | 17.20 | **25.37** | 24.5% |
+| track + range + TTC + FCW *(measured together)* | 0.33 | 0.65 | 1.09 | **1.1%** |
+| **TOTAL (measured)** | **29.70** | **42.56** | **59.67** | **57.6%** |
 
-**It fits, at 60% of budget, so no optimization was done.** Optimizing a stage
+**It fits, at 58% of budget, so no optimization was done.** Optimizing a stage
 that already meets its share is theatre, and the decision is recorded so it does
 not get quietly reopened.
 
@@ -489,21 +489,21 @@ characterise costs **1.1%**.
 
 Three things that are easy to get wrong here, and are not:
 
-- **The total is timed, not summed.** Summing per-stage p99s gives 66.31 ms
-  against a measured 61.91 — a 7% overstatement, because stages do not peak on
+- **The total is timed, not summed.** Summing per-stage p99s gives 64.60 ms
+  against a measured 59.67 — an 8% overstatement, because stages do not peak on
   the same frames. Percentiles are not additive, and the error runs both ways:
   the four cheap stages above are *correlated* (all scale with object count), so
-  summing their p99s **understates** their combined p99 by 9% — 1.17 against a
-  measured 1.28. An earlier draft of this table printed the summed figure, three
+  summing their p99s **understates** their combined p99 by 5% — 1.04 against a
+  measured 1.09. An earlier draft of this table printed the summed figure, three
   paragraphs above the rule forbidding it.
 - **N changed the answer.** A 300-frame run reported p99 45.28 ms; the full
-  1548-frame split reports 61.91. The small sample was not miscalculated, it was
+  1548-frame split reports 59.67. The small sample was not miscalculated, it was
   a percentile estimated from too few frames to contain the stalls it claimed to
   describe.
-- **The over-budget count is not reproducible.** Two runs of the identical
-  configuration gave 3 and 7 frames over budget, with a different stage spiking
-  each time. Those are host scheduling stalls, not pipeline work, so it is
-  reported as a range. p99 itself is stable to ±4%. This is why a p99 alone is
+- **The over-budget count is not reproducible.** Three runs gave 3, 7 and 3
+  frames over budget, with a different stage spiking each time and `max` varying
+  by 39%. Those are host scheduling stalls, not pipeline work, so it is reported
+  as a range. p99 itself spans 8%. This is why a p99 alone is
   not a real-time claim on a general-purpose OS.
 
 ## What the system looks like running

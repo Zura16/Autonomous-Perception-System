@@ -745,3 +745,47 @@ original residual, now isolated and a third of its apparent size.
 Rows 9.8–9.10, D-026, C-33–C-35, 193 tests.
 
 **Next:** the `/quiz` cold reimplementation — the last item D-001 leaves open.
+
+---
+
+## 2026-09-21 · Closing the loop: CI, a re-measured budget, pinned versions
+
+Three gaps from the end-to-end audit, all closed.
+
+**CI.** Every guard this project has — documented commands executed against
+argparse, config keys required to be read or declared inert, claims and
+cross-references audited — was only ever run by hand. `.github/workflows/ci.yml`
+runs lint, tests, `claim_check` and a scope-language grep on every push. It
+installs `.[dev]` and deliberately **not** `.[detect]`: the detector is ~2 GB of
+torch and every check here is static or LiDAR-only, so the job finishes in under
+a minute. One non-obvious setting: `fetch-depth: 0`, because `claim_check`
+resolves each claim to the commit that introduced its benchmark row and a shallow
+clone would make every claim look unpinnable.
+
+**Row 8.1 re-measured on the shipped configuration.** The latency row predated
+D-026, so the benchmark and the code disagreed about what was being timed. Re-run:
+**p99 59.67 ms, 58% of the 103.56 ms budget**, against 61.91 pre-gate — a 3.6%
+difference, well inside the ±8% run-to-run spread. The gates only decide whether
+a range value is returned, so this is the expected null result, now on the record
+rather than assumed.
+
+It also gives Row 8.3 a third repeat, which sharpens the finding: across three
+runs p99 spans 8%, the over-budget count goes 3 / 7 / 3, and `max` varies by 39%.
+The run that differs by a *configuration change* moves less than two identical
+runs differ from each other — which is the cleanest possible statement that the
+spread is host scheduling noise and not the pipeline.
+
+**Versions pinned.** `pyproject.toml` used `>=` with no upper bound on
+everything, so `pip install -U` could silently invalidate every number in
+`benchmarks.md` with no commit to blame. `ultralytics` is the sharp edge: it
+ships the weights *and* the NMS defaults, so a minor release moves AP and
+therefore every range, TTC and FCW figure derived from those boxes. Added upper
+bounds, a `requirements-lock.txt`, and Row 0.2 recording the exact versions every
+row was measured on — a measurement whose software version is unrecorded is no
+more reproducible than one whose split is unrecorded.
+
+**Landed:** `.github/workflows/ci.yml`, `requirements-lock.txt`, Row 0.2,
+Rows 8.1–8.4 re-measured, C-36, bounded `pyproject.toml`.
+
+**Next:** the `/quiz` cold reimplementation ([D-001](decisions.md)) — the last
+outstanding item in the project.

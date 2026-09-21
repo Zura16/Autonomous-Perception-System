@@ -60,6 +60,30 @@ Hard-coding the documented 10 Hz would put a **3.4% systematic error** into ever
 velocity and TTC figure, indistinguishable afterwards from estimator bias
 ([D-006](decisions.md)).
 
+### Row 0.2 — The software every row was measured on
+
+| package | version |
+|---|---|
+| Python | 3.12.4 |
+| numpy | 2.5.1 |
+| opencv-python | 5.0.0.93 |
+| scipy | 1.18.1 |
+| matplotlib | 3.11.1 |
+| **torch** | **2.13.0** |
+| torchvision | 0.28.0 |
+| **ultralytics** | **8.4.103** |
+| pytest / ruff / black | 9.1.1 / 0.16.5 / 26.5.1 |
+
+Pinned in `requirements-lock.txt`; `pyproject.toml` carries upper bounds.
+
+**Why this is a benchmark row and not a footnote.** `ultralytics` ships the
+weights *and* the NMS defaults, so a minor release can move AP and therefore
+every range, TTC and FCW figure derived from those boxes — with no commit in
+this repository to blame it on. Unbounded `>=` specifiers meant a routine
+`pip install -U` could silently invalidate the whole file. A measurement whose
+software version is unrecorded is not reproducible, which is the same failure as
+a measurement whose split is unrecorded.
+
 ### Label inventory
 
 Near-face range bins, FCW classes (Car/Van/Truck/Pedestrian/Cyclist), boxes that
@@ -1040,18 +1064,25 @@ device **mps**, `yolov8n.pt` at 640 px, **batch 1**, conf 0.25, input 1242×375.
 **N = 1548 frames** across all five val drives; **30 warmup frames excluded**;
 device synchronized inside every timed region. Lane solver **included**.
 
+Re-measured 2026-09-21 on the **current** configuration (post-D-025 and D-026),
+so this row and the shipped code agree:
+
 | stage | mean | p50 | p95 | **p99** | max | p99 as % of 103.56 ms |
 |---|---|---|---|---|---|---|
-| detect | 17.91 | 17.93 | 26.81 | **38.91** | 168.42 | 37.6% |
-| track | 0.20 | 0.19 | 0.38 | 0.65 | 1.55 | 0.6% |
-| range | 0.04 | 0.03 | 0.07 | 0.11 | 0.42 | 0.1% |
-| motion + TTC | 0.10 | 0.09 | 0.20 | 0.32 | 2.70 | 0.3% |
-| FCW decide | 0.02 | 0.02 | 0.04 | 0.08 | 1.01 | 0.1% |
-| lanes | 12.95 | 12.13 | 17.72 | **26.24** | 92.72 | 25.3% |
-| **TOTAL (measured)** | **31.25** | **30.13** | **43.47** | **61.91** | **254.13** | **59.8%** |
-| image decode *(not charged)* | 9.23 | 8.76 | 11.57 | 15.88 | 40.02 | — |
+| detect | 17.87 | 17.56 | 25.94 | **38.20** | 153.51 | 36.9% |
+| track | 0.20 | 0.19 | 0.36 | 0.56 | 3.51 | 0.5% |
+| range | 0.04 | 0.03 | 0.07 | 0.13 | 1.08 | 0.1% |
+| motion + TTC | 0.10 | 0.09 | 0.19 | 0.29 | 2.11 | 0.3% |
+| FCW decide | 0.02 | 0.02 | 0.04 | 0.07 | 0.28 | 0.1% |
+| lanes | 12.60 | 11.83 | 17.20 | **25.37** | 80.85 | 24.5% |
+| **TOTAL (measured)** | **30.86** | **29.70** | **42.56** | **59.67** | **189.56** | **57.6%** |
+| image decode *(not charged)* | 9.25 | 8.77 | 11.62 | 15.47 | 47.81 | — |
 
-**Verdict: p99 61.91 ms fits the 103.56 ms budget at 60% of it.** By hard rule 11
+The D-025/D-026 range gates **did not move latency measurably** — 59.67 against
+the pre-gate 61.91, well inside the ±8% run-to-run spread in Row 8.3. Expected:
+both gates only decide whether a range value is returned or withheld.
+
+**Verdict: p99 59.67 ms fits the 103.56 ms budget at 58% of it.** By hard rule 11
 no optimization work is justified — optimizing a stage that already fits is
 theatre. Recorded so the decision is on file rather than reopened later.
 
@@ -1068,9 +1099,9 @@ stages nobody had to think about are the entire latency story.
 
 | quantity | value |
 |---|---|
-| sum of per-stage p99 | 66.31 ms |
-| **measured total p99** | **61.91 ms** |
-| error from summing | **+7.1%** |
+| sum of per-stage p99 | 64.60 ms |
+| **measured total p99** | **59.67 ms** |
+| error from summing | **+8.3%** |
 
 And the error runs **both ways**. Track + range + motion/TTC + FCW, the four
 cheap stages, all scale with object count and therefore peak on the *same*
@@ -1078,10 +1109,10 @@ frames — correlated, where detect and lanes are not:
 
 | track+range+TTC+FCW | p50 | p95 | **p99** | max |
 |---|---|---|---|---|
-| **measured per frame** | 0.34 | 0.68 | **1.28** | 3.98 |
-| summed from stage p99s | 0.34 | — | 1.17 | — |
+| **measured per frame** | 0.33 | 0.65 | **1.09** | 3.98 |
+| summed from stage p99s | 0.33 | — | 1.04 | — |
 
-Summing **understates** here by 9%, having overstated by 7% for the whole
+Summing **understates** here by 5%, having overstated by 8% for the whole
 pipeline. There is no safe direction to round in, which is why the total is
 always timed.
 
@@ -1092,17 +1123,21 @@ latency is timed per frame as its own series.
 
 ### Row 8.3 — The tail is where a real-time claim fails, and it is not reproducible
 
-Two runs of the **identical** configuration, N=1548 each:
+Three runs, N=1548 each. A and B are the identical pre-gate configuration;
+C is post-D-025/D-026, which changes no timed work:
 
-| | run A | run B |
-|---|---|---|
-| TOTAL p99 | 64.61 ms | 61.91 ms |
-| TOTAL max | 263.83 ms | 254.13 ms |
-| **frames over budget** | **3 (0.19%)** | **7 (0.45%)** |
-| detect max | 78.86 ms | 168.42 ms |
-| lanes max | 182.14 ms | 92.72 ms |
+| | run A | run B | run C |
+|---|---|---|---|
+| TOTAL p99 | 64.61 ms | 61.91 ms | 59.67 ms |
+| TOTAL max | 263.83 ms | 254.13 ms | 189.56 ms |
+| **frames over budget** | **3 (0.19%)** | **7 (0.45%)** | **3 (0.19%)** |
+| detect max | 78.86 ms | 168.42 ms | 153.51 ms |
+| lanes max | 182.14 ms | 92.72 ms | 80.85 ms |
 
-**p99 is stable to ±4%; the over-budget count is not — it more than doubled.**
+**p99 spans 8% across three runs; the over-budget count more than doubles
+between them, and `max` varies by 39%.** Run C differs from A and B by a config
+change, and moves less than A and B differ from each other — which is the point:
+the spread is host noise, not the pipeline.
 Those frames are host scheduling stalls, not pipeline work: the stage that spikes
 even changes between runs. A "frames over budget" figure from a single run is not
 a property of this system, and is reported as a range rather than a number.
@@ -1118,9 +1153,9 @@ Same pipeline, same machine, different N:
 | N | drives | TOTAL p99 | over budget |
 |---|---|---|---|
 | 300 | 1 (`0059`) | **45.28 ms** | 0 |
-| 1548 | 5 (all val) | **61.91–64.61 ms** | 3–7 |
+| 1548 | 5 (all val) | **59.67–64.61 ms** (3 runs) | 3–7 |
 
-**The 300-frame p99 understated the tail by 37%.** At N=300 the p99 is the
+**The 300-frame p99 understated the tail by 32–43%.** At N=300 the p99 is the
 3rd-worst frame, and the rare host stalls (order 1-in-500) are usually absent
 from the sample entirely. The small-N number was not wrong arithmetic; it was a
 percentile estimated from too few samples to contain the event it was supposed

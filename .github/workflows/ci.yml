@@ -1,0 +1,73 @@
+# Runs the checks that were previously only ever run by hand.
+#
+# Three guard tests exist to stop specific defects from recurring -- documented
+# commands drifting from argparse, config keys going unread, claims citing rows
+# that do not exist. A guard nobody runs is decoration, so this runs them on
+# every push and pull request.
+#
+# Deliberately installs `.[dev]` and NOT `.[detect]`. The detector pulls ~2 GB of
+# torch and every check here is static or LiDAR-only, so the job finishes in
+# under a minute. That split is the same one hard rule 1 asks for: the ruler and
+# its verification exist independently of the estimator.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # claim_check resolves each claim to the commit that introduced its
+          # benchmark row, so it needs real history. The default shallow clone
+          # would make every claim look unpinnable.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: |
+          ruff check .
+          black --check .
+
+      - name: Tests
+        run: python -m pytest tests/ -q
+
+      - name: Claims, rows and cross-references
+        run: python tools/claim_check.py
+
+      - name: Scope language
+        # Hard rule 13: this project must never describe itself as sensor
+        # fusion, as commanding braking, or as real-time without a named budget.
+        # Every legitimate mention is a rule or a warning ABOUT the phrase, and
+        # those all sit in docs/ -- so the code and README are checked, where a
+        # slip would actually mislead.
+        run: |
+          set -e
+          if grep -rniE "sensor fusion|commands braking|real.time perception" \
+               --include="*.py" aps/ eval/ tools/ app/ bench/; then
+            echo "::error::scope language violation (CLAUDE.md hard rule 13)"
+            exit 1
+          fi
+          echo "scope language clean"

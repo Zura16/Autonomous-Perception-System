@@ -124,9 +124,9 @@ While the override stands, `/quiz` is **load-bearing rather than optional**, and
 | Lane departure warning | body-over-line **3/5** (95% CI 23–88%) · false warnings **2/82 (2.4%)** · 8 of 13 rule frames graze the threshold ([D-023](docs/decisions.md)) |
 | **FCW: TPR and FP/hour** | **NOT PUBLISHABLE on this data** — val holds **2 threat events** below TTC 2 s in **0.045 h** of exposure; min in-path TTC 1.17 s ([D-024](docs/decisions.md)) |
 | FCW decision layer, what is measured | persistence 3/3 cuts onsets 13→3 and false alarms 12→2 at TTC 2.0 s for 0.2 s latency · **half of false alarms are ghost tracks** · `sigma` deadband can suppress the threat |
-| **End-to-end latency (M2 MPS, val, N=1548, 30 warmup excl.)** | TOTAL p50 **30.13** · p95 43.47 · p99 **61.91 ms = 60% of budget** · 3–7 frames over budget across runs |
-| Per-stage p99 (same run) | detect **38.91** (37.6%) · lanes **26.24** (25.3%) · track 0.65 · motion+TTC 0.32 · range 0.11 · FCW 0.08 ms. Decode 15.88 ms measured, **not charged** |
-| Latency caveat | summing stage p99s overstates the total by **7.1%** — percentiles are not additive. N=300 understated total p99 by **37%** (Rows 8.2, 8.4) |
+| **End-to-end latency (M2 MPS, val, N=1548, 30 warmup excl.)** | TOTAL p50 **29.70** · p95 42.56 · p99 **59.67 ms = 58% of budget** · 3–7 frames over budget across three runs |
+| Per-stage p99 (same run) | detect **38.20** (36.9%) · lanes **25.37** (24.5%) · the four cheap stages together 1.09 (1.1%). Decode 15.47 ms measured, **not charged** |
+| Latency caveat | summing stage p99s overstates the total by **8.3%** (and understates the correlated stages by 5%) — percentiles are not additive. N=300 understated total p99 by **34%** (Rows 8.2, 8.4) |
 | GT ruler on **held-out test** | MAE **0.27 m**, fail 0.15% — against val's 0.25 m / 0.27%. The instrument transferred |
 | Detection on **held-out test** | AP **0.737** class-agnostic (val 0.615) · recall 93/89/74/61/51% · VRU AP **0.127** on 250 labels |
 | Test suite count | **246** |

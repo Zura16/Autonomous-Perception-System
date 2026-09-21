@@ -3,17 +3,23 @@ name = "aps"
 version = "0.1.0"
 description = "Monocular vision perception and forward-collision-warning stack, evaluated against LiDAR ground truth."
 requires-python = ">=3.11"
+# Upper bounds are deliberate. Every benchmark row in docs/benchmarks.md was
+# measured against one set of versions, and an unbounded `>=` lets a routine
+# `pip install -U` silently move those numbers with no commit to blame.
+# `ultralytics` is the sharp one: it ships weights and NMS defaults, so a minor
+# release can change AP and every range figure derived from the boxes. The exact
+# versions the rows were measured on are recorded in docs/benchmarks.md Row 0.2.
 dependencies = [
-    "numpy>=1.24",
-    "opencv-python>=4.7",
-    "pyyaml>=6.0",
-    "scipy>=1.11",
-    "matplotlib>=3.7",
+    "numpy>=1.24,<3",
+    "opencv-python>=4.7,<6",
+    "pyyaml>=6.0,<7",
+    "scipy>=1.11,<2",
+    "matplotlib>=3.7,<4",
 ]
 
 [project.optional-dependencies]
-detect = ["torch>=2.0", "torchvision>=0.15", "ultralytics>=8.0"]
-dev = ["pytest>=7.4", "ruff>=0.4", "black>=24.0"]
+detect = ["torch>=2.0,<3", "torchvision>=0.15,<1", "ultralytics>=8.0,<9"]
+dev = ["pytest>=7.4,<10", "ruff>=0.4,<1", "black>=24.0,<27"]
 
 [build-system]
 requires = ["setuptools>=68"]
