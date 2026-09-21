@@ -275,7 +275,13 @@ def test_the_player_points_at_a_drive_that_was_actually_exported():
     js = (SITE / "app.js").read_text()
     m = re.search(r'const DRIVE = "([^"]+)"', js)
     assert m, "site/app.js no longer declares DRIVE"
-    exported = {p.name for p in (SITE / "data").iterdir() if p.is_dir()}
+    data_dir = SITE / "data"
+    assert data_dir.is_dir(), (
+        "site/data/ is missing. It holds the exported replay the page depends on; "
+        "if it is absent from a checkout, check that .gitignore's dataset rule is "
+        "anchored to /data/ and has not swallowed it."
+    )
+    exported = {p.name for p in data_dir.iterdir() if p.is_dir()}
     assert m.group(1) in exported, (
         f"the player expects {m.group(1)!r} but site/data holds {sorted(exported)}. "
         "Re-run tools/export_replay.py for that drive, or update DRIVE."

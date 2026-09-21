@@ -17,8 +17,12 @@ env/
 ENV/
 
 # ── Datasets (fetched, never committed -- tools/fetch_kitti.py reproduces them)
-data/
-!data/.gitkeep
+# Anchored to the repo root on purpose. An unanchored `data/` matches ANY
+# directory of that name at any depth, which silently swallowed site/data/ --
+# the exported replay the published page depends on. The page deployed, every
+# frame 404'd, and the only visible symptom was a spinner that never cleared.
+/data/
+!/data/.gitkeep
 
 # ── Model weights (downloaded artefacts, not source)
 *.pt

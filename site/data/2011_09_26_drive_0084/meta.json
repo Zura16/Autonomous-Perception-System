@@ -1,0 +1,20 @@
+{
+  "drive": "2011_09_26_drive_0084",
+  "split": "val",
+  "scene": "city",
+  "frames": 110,
+  "source_range": [
+    130,
+    240
+  ],
+  "fps": 9.651,
+  "width": 1100,
+  "height": 299,
+  "envelope_m": [
+    20.0,
+    50.0
+  ],
+  "envelope_max_mape_pct": 13.0,
+  "ttc_gated_by_envelope": false,
+  "note": "Offline replay of measured pipeline output. Frames are composited by app/replay.py; this is not a live service and nothing is actuated."
+}
