@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous Perception System — error characterisation</title>
+    <meta name="description" content="A monocular forward-collision-warning stack evaluated against LiDAR ground truth. Offline, open-loop. The headline claim failed on held-out data, and that is the result.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="layout">
+
+    <!-- ══════════ Sidebar: identity and scope ══════════ -->
+    <aside class="sidebar">
+        <div class="sidebar-card border-glow-card">
+            <span class="edge-light"></span>
+            <div class="border-glow-inner">
+                <div class="hud-logo">📐</div>
+                <h1 class="sidebar-name">Autonomous<br>Perception System</h1>
+                <p class="sidebar-title">Monocular range, measured against LiDAR</p>
+
+                <div class="sidebar-divider"></div>
+
+                <div class="control-group">
+                    <span class="control-label">Scope, stated plainly</span>
+                    <ul class="scope-list">
+                        <li>A <strong>single forward camera</strong></li>
+                        <li>No radar. No fusion. LiDAR is <strong>ground truth only</strong>, never an input</li>
+                        <li>Emits a warning and an AEB <strong>request</strong></li>
+                        <li><strong>Offline, open-loop.</strong> It does not brake anything</li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-divider"></div>
+
+                <div class="control-group">
+                    <span class="control-label">Headline</span>
+                    <div class="stat-row"><span>Range error, 20–50 m</span><b>≤13%</b></div>
+                    <div class="stat-row"><span>LiDAR ruler MAE</span><b>0.25 m</b></div>
+                    <div class="stat-row"><span>Pipeline p99</span><b>59.7 ms</b></div>
+                    <div class="stat-row"><span>Budget (9.657 Hz)</span><b>103.56 ms</b></div>
+                    <div class="stat-row"><span>Tests</span><b>246</b></div>
+                </div>
+
+                <div class="sidebar-divider"></div>
+
+                <div class="control-group">
+                    <a class="btn btn-control" href="https://github.com/Zura16/Autonomous-Perception-System">Repository →</a>
+                    <a class="btn btn-secondary-outline" href="https://github.com/Zura16/Autonomous-Perception-System/blob/main/docs/benchmarks.md">Every number, in context →</a>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ══════════ Main ══════════ -->
+    <main class="main-content">
+
+        <section class="section hero">
+            <div class="section-bg-title">EVIDENCE</div>
+            <h2 class="section-title">A range estimator, and the ruler built to grade it</h2>
+            <p class="hero-description">
+                Monocular vision cannot measure distance directly — it infers it. This project
+                builds the <strong>LiDAR ground-truth harness first</strong>, characterises the
+                ruler's own error, and only then measures what a camera-only estimator can
+                honestly claim. A dashboard nobody can falsify is worth less than an
+                error-vs-range curve on a plain background.
+            </p>
+        </section>
+
+        <!-- The headline: the held-out failure -->
+        <div class="finding-card border-glow-card finding-negative">
+            <span class="edge-light"></span>
+            <div class="border-glow-inner">
+                <div class="card-header">
+                    <span class="card-header-dot dot-alert"></span>
+                    <h3>The headline claim did not survive held-out data</h3>
+                </div>
+                <p>
+                    An operating envelope of <strong>10–30 m at ≤15% error</strong> was declared on
+                    validation data. Two sequences were held out, never looked at, and never used to
+                    choose a parameter. Running the frozen pipeline on them once:
+                </p>
+                <div class="table-scroll">
+                <table class="data-table">
+                    <thead><tr><th>range bin</th><th>0–10 m</th><th>10–20 m</th><th>20–30 m</th><th>30–50 m</th></tr></thead>
+                    <tbody>
+                        <tr><td>validation <span class="muted">(declared on)</span></td><td>22.7%</td><td class="ok">10.3%</td><td class="ok">11.0%</td><td>15.3%</td></tr>
+                        <tr><td><b>held-out test</b></td><td>24.1%</td><td class="bad">17.2%</td><td class="bad">15.6%</td><td>14.4%</td></tr>
+                    </tbody>
+                </table>
+                </div>
+                <p>
+                    Both bins the claim rested on missed. The far bins <em>improved</em>. This is
+                    published as the result rather than repaired into one, and the sections below
+                    are the diagnosis — not a walk-back.
+                </p>
+                <figure>
+                    <img src="figures/range_error_test.png" alt="Monocular range error versus range on the held-out KITTI test split. Both estimator curves sit above the 15% threshold across the 10–30 m band, while the dashed median curves sit well below the means." loading="lazy">
+                    <figcaption>
+                        The held-out curve, as frozen. Solid = mean error, dashed = median. The gap
+                        between them is the tail, and it is the whole story.
+                    </figcaption>
+                </figure>
+            </div>
+        </div>
+
+        <!-- Why it wasn't the ruler or the detector -->
+        <div class="dashboard-grid">
+            <div class="telemetry-card border-glow-card">
+                <span class="edge-light"></span>
+                <div class="border-glow-inner">
+                    <span class="telemetry-number">0.25 → 0.27 m</span>
+                    <span class="telemetry-label">LiDAR ruler MAE, val → held-out</span>
+                    <p class="card-note">The instrument transferred. The failure is not the ground truth.</p>
+                </div>
+            </div>
+            <div class="telemetry-card border-glow-card">
+                <span class="edge-light"></span>
+                <div class="border-glow-inner">
+                    <span class="telemetry-number">0.615 → 0.737</span>
+                    <span class="telemetry-label">Detection AP@0.5, val → held-out</span>
+                    <p class="card-note">Test is <em>easier</em> for the detector. It was handed more and better boxes, and still did worse.</p>
+                </div>
+            </div>
+            <div class="telemetry-card border-glow-card">
+                <span class="edge-light"></span>
+                <div class="border-glow-inner">
+                    <span class="telemetry-number">1.1 pt vs 8.1 pt</span>
+                    <span class="telemetry-label">Median moved vs mean moved, 20–30 m</span>
+                    <p class="card-note">The centre transferred; the tail did not. Mean error described a collapse that never happened to the typical object.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- The diagnosis -->
+        <div class="finding-card border-glow-card">
+            <span class="edge-light"></span>
+            <div class="border-glow-inner">
+                <div class="card-header">
+                    <span class="card-header-dot"></span>
+                    <h3>What it actually was: ten detections</h3>
+                </div>
+                <p>
+                    In the worst 50-frame block, <strong>10 detections out of 199 carried 81% of the
+                    summed bias</strong>, while the block's median error was −1.54 m. All ten had box
+                    bottoms sitting about 4.7 px below the horizon row, where
+                </p>
+                <p class="formula">D&nbsp;=&nbsp;f·h&nbsp;/&nbsp;(v<sub>bottom</sub>&nbsp;−&nbsp;v<sub>horizon</sub>)</p>
+                <p>
+                    divides by almost nothing. The worst returned <strong>253 m for an object at
+                    25.8 m</strong>. The guard that should have caught it was a division-by-zero
+                    check wearing a validity check's name: it permitted a 398 m answer at 33% range
+                    error per pixel of box-edge error.
+                </p>
+                <p class="callout">
+                    Three other explanations were tested first and <strong>died on measurement</strong>:
+                    a degraded ruler (no), occlusion (a nearer object was present for 87.9% of
+                    outliers and 85.7% of everything else — no discrimination), and the road-slope
+                    mechanism that had explained the far-field bias (it predicted −0.65 m against an
+                    observed +9.08 m — wrong sign, an order of magnitude short). The dead hypotheses
+                    are part of the result.
+                </p>
+            </div>
+        </div>
+
+        <!-- The near-field limit -->
+        <div class="finding-card border-glow-card">
+            <span class="edge-light"></span>
+            <div class="border-glow-inner">
+                <div class="card-header">
+                    <span class="card-header-dot"></span>
+                    <h3>The near field is a lens limit, not a software bug</h3>
+                </div>
+                <p>
+                    The worst range bin was always 0–10 m — on a collision-warning system, the worst
+                    possible place for it. A ground contact point at range <em>D</em> projects to row
+                    <code>cy + f·h/D</code>, which leaves a 375-row image below
+                </p>
+                <p class="formula">D<sub>min</sub> = f·h / (H<sub>img</sub> − cy) = <b>5.91 m</b></p>
+                <p>
+                    Closer than that, the contact point is <strong>not in the picture</strong>. The box
+                    bottom reaches the frame edge and stops, so range saturates:
+                </p>
+                <div class="table-scroll">
+                <table class="data-table">
+                    <thead><tr><th></th><th>validation</th><th>held-out test</th></tr></thead>
+                    <tbody>
+                        <tr><td>objects closer than 5.91 m</td><td>261</td><td>81</td></tr>
+                        <tr><td><b>over-estimated</b></td><td class="bad">100%</td><td class="bad">100%</td></tr>
+                        <tr><td><b>their estimates cluster at</b></td><td><b>6.03 m</b></td><td><b>6.02 m</b></td></tr>
+                        <tr><td class="muted">predicted, nothing fitted</td><td class="muted">5.91 m</td><td class="muted">5.91 m</td></tr>
+                    </tbody>
+                </table>
+                </div>
+                <p>
+                    The size-prior estimator fails there too, and slightly worse — which I did not
+                    expect, since <code>D = f·H/h</code> contains no ground plane at all. The same
+                    edge truncates the box <em>height</em>. One boundary, two mechanisms.
+                </p>
+                <p class="callout">
+                    A camera mounted 1.655 m up cannot see the wheels of a car four metres in front
+                    of it, and no better algorithm recovers that band — a wider lens, a lower mount,
+                    or radar does. That is one concrete reason production emergency braking fuses
+                    sensors, rather than an abstract one.
+                </p>
+            </div>
+        </div>
+
+        <!-- Latency -->
+        <div class="finding-card border-glow-card">
+            <span class="edge-light"></span>
+            <div class="border-glow-inner">
+                <div class="card-header">
+                    <span class="card-header-dot dot-live"></span>
+                    <h3>Latency, against a measured budget</h3>
+                </div>
+                <p>
+                    The budget is not a round number: KITTI's measured frame interval is
+                    <strong>103.56 ms</strong> (9.657 Hz), not the documented 10 Hz. Apple M2 / MPS,
+                    YOLOv8n at 640 px, batch 1, N = 1548 frames, 30 warmup excluded, device
+                    synchronised inside every timed region.
+                </p>
+                <div class="table-scroll">
+                <table class="data-table">
+                    <thead><tr><th>stage</th><th>p50</th><th>p95</th><th>p99</th><th>% of budget</th></tr></thead>
+                    <tbody>
+                        <tr><td>detect</td><td>17.56</td><td>25.94</td><td><b>38.20</b></td><td>36.9%</td></tr>
+                        <tr><td>lanes</td><td>11.83</td><td>17.20</td><td><b>25.37</b></td><td>24.5%</td></tr>
+                        <tr><td>track + range + TTC + decide</td><td>0.33</td><td>0.65</td><td>1.09</td><td class="ok">1.1%</td></tr>
+                        <tr><td><b>TOTAL, measured</b></td><td><b>29.70</b></td><td><b>42.56</b></td><td><b>59.67</b></td><td><b>57.6%</b></td></tr>
+                    </tbody>
+                </table>
+                </div>
+                <p>
+                    It fits at 58%, so <strong>no optimisation was done</strong> — optimising a stage
+                    that already meets its share is theatre, and the decision is on the record so it
+                    does not get quietly reopened. Note what the table says about effort: the geometry
+                    that took six phases to characterise costs <strong>1.1%</strong>.
+                </p>
+                <p class="callout">
+                    Percentiles are not additive. Summing the stage p99s gives 64.60 ms against a
+                    measured 59.67 — and for the four correlated cheap stages it <em>understates</em>
+                    by 5%. There is no safe direction to round in, so the total is always timed. The
+                    over-budget frame count is not even reproducible: three identical runs gave 3, 7
+                    and 3 frames over, with a different stage spiking each time. Those are host
+                    scheduling stalls, not pipeline work.
+                </p>
+            </div>
+        </div>
+
+        <!-- What the system looks like -->
+        <div class="hud-monitor border-glow-card">
+            <span class="edge-light"></span>
+            <div class="border-glow-inner">
+                <div class="card-header">
+                    <span class="card-header-dot"></span>
+                    <h3>What it looks like running</h3>
+                </div>
+                <figure>
+                    <img src="figures/hud_still.jpg" alt="Heads-up display over a KITTI frame with tracked vehicles labelled by range and time-to-collision, alongside a metric top-down panel showing the credible range band." loading="lazy">
+                </figure>
+                <p>
+                    The replay presents results measured in earlier phases and adds no estimate of
+                    its own. Where an estimator declined, it prints <code>--</code> rather than a
+                    guess. Range outside the credible band is withheld entirely — which means
+                    <strong>it goes quiet in the near field</strong>, where a warning matters most.
+                    That is the measurement talking, and it is not styled away.
+                </p>
+            </div>
+        </div>
+
+        <!-- Scope discipline -->
+        <div class="finding-card border-glow-card">
+            <span class="edge-light"></span>
+            <div class="border-glow-inner">
+                <div class="card-header">
+                    <span class="card-header-dot dot-alert"></span>
+                    <h3>What this is not</h3>
+                </div>
+                <p>
+                    Production emergency braking is a safety-critical function under ISO 26262 and
+                    ISO 21448 (SOTIF), and production stacks fuse radar with camera precisely
+                    <em>because</em> monocular range is unreliable. This is not that. Knowing exactly
+                    why is the point.
+                </p>
+                <div class="table-scroll">
+                <table class="data-table">
+                    <thead><tr><th>Tempting phrase</th><th>Why it is false here</th></tr></thead>
+                    <tbody>
+                        <tr><td>“Sensor fusion”</td><td>LiDAR is ground truth only. It is not in the estimation path.</td></tr>
+                        <tr><td>“Autonomous emergency braking”</td><td>The system emits a <em>request</em>. Nothing is actuated.</td></tr>
+                        <tr><td>“Real-time”</td><td>Only against the named 103.56 ms budget, and only detection and lanes are timed end to end.</td></tr>
+                        <tr><td>“Accurate to ±X m”</td><td>Error must be binned by range. A single figure hides that the near field is worst.</td></tr>
+                        <tr><td>A collision-warning detection rate</td><td><strong>Deliberately not produced.</strong> The data holds 2 threat events in 0.045 h. A rate over two events is not a rate.</td></tr>
+                    </tbody>
+                </table>
+                </div>
+                <p class="callout">
+                    Every claim on this page is generated from a benchmark row and pinned to the
+                    commit that measured it. 36 claims, 56 rows, audited on every push by CI —
+                    including a check that no claim cites a row that does not exist.
+                </p>
+            </div>
+        </div>
+
+        <footer class="site-footer">
+            <p>
+                Monocular camera only · offline, open-loop evaluation · LiDAR used as ground truth,
+                never as an input · nothing is actuated.
+            </p>
+            <p class="muted">
+                KITTI raw, date 2011_09_26. Split by sequence: 5 validation drives, 2 held out.
+                Measured on torch 2.13.0 / ultralytics 8.4.103 — versions pinned, because a minor
+                release moves every number.
+            </p>
+        </footer>
+
+    </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
