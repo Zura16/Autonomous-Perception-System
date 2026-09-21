@@ -997,3 +997,37 @@ a.btn {
     .replay-controls { flex-wrap: wrap; }
     .replay-scrub { order: 3; flex-basis: 100%; }
 }
+
+/* ── live mode (visible only when tools/serve.py is serving) ── */
+.live-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding: 9px 14px;
+    border-radius: 8px;
+    background: rgba(45, 138, 78, 0.10);
+    border-left: 3px solid var(--green);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    animation: live-pulse 1.6s ease-in-out infinite;
+    flex: none;
+}
+
+@keyframes live-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+
+.live-timing {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.live-timing.over-budget { color: var(--red); font-weight: 600; }

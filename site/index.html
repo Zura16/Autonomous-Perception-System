@@ -273,6 +273,13 @@
                     <div id="replay-loading" class="replay-loading"><span id="loading-text">loading frames…</span></div>
                 </div>
 
+                <div id="live-bar" class="live-bar" hidden>
+                    <span class="live-dot"></span>
+                    <span><b>LIVE</b> — pipeline running locally on <code id="live-drive"></code>,
+                    <span id="live-device"></span>. Frames are being computed now, not replayed.</span>
+                    <span id="live-timing" class="live-timing"></span>
+                </div>
+
                 <div class="replay-controls">
                     <button id="replay-play" class="btn btn-control" aria-label="Play replay">▶ Play</button>
                     <input id="replay-scrub" class="replay-scrub" type="range" min="0" value="0" step="1" aria-label="Scrub through replay frames">

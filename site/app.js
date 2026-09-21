@@ -242,3 +242,129 @@ async function initReplay() {
 }
 
 document.addEventListener("DOMContentLoaded", initReplay);
+
+/* ================== LIVE MODE (local server only) ==================
+ *
+ * When `tools/serve.py` is serving this page, the pipeline is running in a
+ * process behind it and the frames are computed on demand. The page then polls
+ * /api/frame and /api/telemetry instead of the exported clip.
+ *
+ * The probe is gated on hostname and the request is same-origin and relative.
+ * That gate is the entire lesson of the v1 site, which shipped a PUBLIC page
+ * hard-coded to http://127.0.0.1:5000: every visitor's browser tried to reach a
+ * backend on their own machine, every control was dead, and nothing in the page
+ * admitted it. On github.io this code never fires.
+ */
+
+const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+
+async function initLive() {
+  if (!LOCAL_HOSTS.includes(location.hostname)) return; // published page: never probe
+
+  let status;
+  try {
+    const r = await fetch("api/status", { cache: "no-store" });
+    if (!r.ok) return;
+    status = await r.json();
+  } catch {
+    return; // served by a plain static server, not tools/serve.py -- stay in replay mode
+  }
+  if (!status.live) return;
+
+  const img = document.getElementById("replay-frame");
+  const scrub = document.getElementById("replay-scrub");
+  const playBtn = document.getElementById("replay-play");
+  const counter = document.getElementById("replay-counter");
+  const banner = document.getElementById("replay-banner");
+  const tbody = document.querySelector("#replay-table tbody");
+  const bar = document.getElementById("live-bar");
+  const loading = document.getElementById("replay-loading");
+  if (!img) return;
+
+  loading.classList.add("hidden");
+  bar.hidden = false;
+  document.getElementById("live-drive").textContent = status.drive.replace("2011_09_26_", "");
+  document.getElementById("live-device").textContent = `device ${status.device}`;
+  scrub.max = String(status.n_frames - 1);
+
+  // Replace the replay player's handlers wholesale. Cloning the node drops the
+  // listeners initReplay attached; leaving both bound would have the two modes
+  // fighting over the same <img>.
+  const freshPlay = playBtn.cloneNode(true);
+  const freshScrub = scrub.cloneNode(true);
+  playBtn.replaceWith(freshPlay);
+  scrub.replaceWith(freshScrub);
+
+  let playing = status.playing;
+  freshPlay.textContent = playing ? "⏸ Pause" : "▶ Play";
+
+  const control = (action, extra = "") =>
+    fetch("api/control", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `action=${action}${extra}`,
+    });
+
+  freshPlay.addEventListener("click", async () => {
+    playing = !playing;
+    freshPlay.textContent = playing ? "⏸ Pause" : "▶ Play";
+    await control(playing ? "play" : "pause");
+  });
+  freshScrub.addEventListener("change", () => control("seek", `&index=${freshScrub.value}`));
+
+  const timing = document.getElementById("live-timing");
+
+  async function poll() {
+    try {
+      const f = await fetch("api/telemetry", { cache: "no-store" }).then((r) => r.json());
+      if (f.frame === null || f.frame === undefined) return;
+
+      img.src = `api/frame?t=${Date.now()}`;
+      if (document.activeElement !== freshScrub) freshScrub.value = String(f.frame);
+      counter.textContent = `frame ${f.frame} · ${f.t_s.toFixed(2)} s`;
+
+      const t = f.timing_ms;
+      const pct = Math.round((100 * t.total) / f.budget_ms);
+      timing.textContent = `${t.total.toFixed(1)} ms/frame · ${pct}% of the ${f.budget_ms} ms budget`;
+      timing.className = `live-timing${t.total > f.budget_ms ? " over-budget" : ""}`;
+
+      if (f.aeb_request) {
+        banner.hidden = false;
+        banner.className = "replay-banner banner-aeb";
+        banner.textContent = "AEB REQUEST — logged, not actuated";
+      } else if (f.warning) {
+        banner.hidden = false;
+        banner.className = "replay-banner banner-warn";
+        banner.textContent = "FORWARD COLLISION WARNING";
+      } else {
+        banner.hidden = true;
+      }
+
+      tbody.innerHTML = "";
+      if (!f.objects.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">no tracked objects</td></tr>';
+      }
+      for (const o of f.objects.slice().sort((a, b) => (a.range_m ?? 1e9) - (b.range_m ?? 1e9))) {
+        const tr = document.createElement("tr");
+        if (o.warning) tr.className = "row-warn";
+        const range =
+          o.range_m === null
+            ? '<span class="muted" title="estimator declined">--</span>'
+            : o.in_envelope
+              ? `<b>${o.range_m.toFixed(1)} m</b>`
+              : `<span class="muted" title="outside the credible envelope">${o.range_m.toFixed(1)} m</span>`;
+        tr.innerHTML =
+          `<td>#${o.id}</td><td>${o.group}</td><td>${range}</td>` +
+          `<td>${fmt(o.ttc_s, " s")}</td><td>${fmt(o.lateral_m, " m")}</td>`;
+        tbody.appendChild(tr);
+      }
+    } catch {
+      timing.textContent = "server stopped";
+    }
+  }
+
+  setInterval(poll, 90);
+  poll();
+}
+
+document.addEventListener("DOMContentLoaded", initLive);

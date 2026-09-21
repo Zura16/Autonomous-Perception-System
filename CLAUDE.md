@@ -163,6 +163,11 @@ python bench/run_bench.py --drive 2011_09_26_drive_0059 --frames 300   # one dri
 python app/replay.py --drive 2011_09_26_drive_0059 --frames 0 200 --lanes --out artifacts/replay.mp4
 python app/replay.py --drive 2011_09_26_drive_0059 --still 96 --lanes --out docs/figures/hud_still.jpg
 
+# ── Live local UI (Phase 9) -- serves site/ with the pipeline running behind it
+python tools/serve.py                                          # http://127.0.0.1:8000
+python tools/serve.py --drive 2011_09_26_drive_0084 --start 130 --fps 9.657
+python tools/export_replay.py --drive 2011_09_26_drive_0084 --frames 130 240   # static clip
+
 # ── Writeup artifacts (Phase 9)
 python tools/plot_range_curve.py --split val                   # regenerate the headline figure
 python tools/claim_check.py                                    # audit claims.md; --pin fills hashes

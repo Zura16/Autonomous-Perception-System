@@ -533,6 +533,42 @@ range in the near field**, because that is where the estimator is least
 trustworthy (21–22% MAPE on both splits) — and the near field is where a
 collision-warning system most needs to be right.
 
+## Running it yourself
+
+Two ways, and the difference matters.
+
+**The published page** at
+[zura16.github.io/Autonomous-Perception-System](https://zura16.github.io/Autonomous-Perception-System/)
+plays a pre-rendered clip: 110 frames of real pipeline output, scrubable, with
+per-frame telemetry. It is static by necessity — GitHub Pages serves files, not
+processes — and it never probes for a backend.
+
+**Locally, the same page runs live over a real pipeline process:**
+
+```bash
+python tools/serve.py                 # then open http://127.0.0.1:8000
+```
+
+Frames are computed on demand, one at a time, and the UI shows the *measured*
+per-frame latency against the 103.56 ms budget — this machine's clock, not a
+number copied from `benchmarks.md`. Play, pause and seek drive the worker
+thread; seeking resets the tracker and the scale-rate filter, because splicing
+two moments of a drive together manufactures a closing speed from the seam.
+
+The page detects live mode by hostname and only then probes `api/status`. On
+`github.io` that code never runs. This is deliberate: the previous version of
+this site was a public page hardcoded to `http://127.0.0.1:5000`, so every
+visitor's browser reached for a service on their own machine and every control
+was dead.
+
+**Why KITTI and not your webcam.** The pipeline would happily run on one — it
+sustains 33.7 Hz — but every range number is welded to KITTI's camera:
+`fy = 721.54 px`, a 1242×375 frame, and a LiDAR-measured 1.655 m mount. On other
+hardware, range and lane offset are wrong by an unknown scale and there is no
+LiDAR to catch it. **TTC would survive**, since `f` and `H` cancel in `−u/u̇` —
+that calibration-free property is the most portable result here — but a live
+mode that silently invalidates half its outputs is not worth the demo.
+
 ## Setup
 
 ```bash

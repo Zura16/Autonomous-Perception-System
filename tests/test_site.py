@@ -35,6 +35,17 @@ def site_code() -> str:
     return "\n".join(p.read_text() for p in sorted(SITE.glob("*.js")))
 
 
+def strip_comments(js: str) -> str:
+    """Drop comments before scanning.
+
+    app.js documents the endpoints it removed and why. The record of a deleted
+    call is not a live call to it, and a test that cannot tell the difference
+    would punish the explanation.
+    """
+    js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    return re.sub(r"^\s*//.*$", "", js, flags=re.M)
+
+
 def test_site_sources_exist():
     """Guard the suite: an empty site/ would make everything below vacuous."""
     assert (SITE / "index.html").is_file()
@@ -85,34 +96,56 @@ def test_the_disclaimer_table_is_present():
         assert phrase in visible, f"the disclaimer table no longer names {phrase!r}"
 
 
-def test_the_page_does_not_call_a_backend_that_does_not_exist():
-    """A public page pointing at localhost is broken for every visitor.
+def test_the_page_never_hardcodes_a_backend_address():
+    """The v1 defect, pinned.
 
     The old app.js fetched /api/control, /api/telemetry, /api/obstacles and
-    /video_feed from 127.0.0.1:5000. APS is offline and open-loop: there is no
-    service to call, so every control was permanently dead.
-    """
-    # Strip comments first: app.js documents what was removed and why, and the
-    # record of a deleted endpoint is not a live call to it.
-    code = re.sub(r"/\*.*?\*/", "", site_code(), flags=re.S)
-    code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
-    for dead in ("127.0.0.1", "localhost", "/api/", "/video_feed"):
-        assert dead not in code, f"site/app.js still references {dead!r}"
+    /video_feed from a hardcoded `http://127.0.0.1:5000`. That page was public,
+    so every visitor's browser tried to reach a service on *their own* machine,
+    every control was dead, and nothing on the page admitted it.
 
-    # The page may fetch its OWN exported data -- that is the replay player
-    # reading site/data/*.json, which ships with the page. What it must never do
-    # is reach off-origin or to a service. An earlier version of this test
-    # banned `fetch(` outright, which would have blocked the honest use along
-    # with the dishonest one.
-    for call in re.findall(r"fetch\(\s*([^)]+)", code):
-        assert "http://" not in call and "https://" not in call, (
-            f"site/app.js fetches an absolute URL: {call.strip()[:60]} -- "
-            "the page must depend on nothing but itself"
+    Live mode is allowed to exist -- `tools/serve.py` serves this same page --
+    but only over relative, same-origin paths, so the request is meaningful
+    exactly when something is there to answer it.
+    """
+    code = strip_comments(site_code())
+    # The LOCAL_HOSTS gate necessarily names these hosts -- it exists to compare
+    # location.hostname against them. What matters is that no host appears in a
+    # URL the page actually requests, so the declaration is removed before the
+    # scan and checked on its own in the next test.
+    # Matched to end of line, not to the closing bracket: the list contains the
+    # IPv6 literal "[::1]", so a `[^\]]*` scan stops inside it and matches nothing.
+    code = re.sub(r"^.*LOCAL_HOSTS\s*=.*$", "", code, flags=re.M)
+    for dead in ("127.0.0.1", "localhost", "http://", "https://"):
+        assert dead not in code, (
+            f"site/app.js hardcodes {dead!r}. Live endpoints must be relative so "
+            "the published page cannot point at a machine that is not serving it."
         )
-        assert "DATA" in call or "data/" in call, (
-            f"unexpected fetch target {call.strip()[:60]}; only the exported "
-            "replay data under site/data/ may be loaded"
+    for call in re.findall(r"fetch\(\s*[\"`']([^\"`'$]*)", code):
+        assert not call.startswith("/"), (
+            f"fetch target {call!r} is root-relative; it must be relative to the "
+            "page so the site works from a subpath on GitHub Pages"
         )
+
+
+def test_live_mode_is_gated_on_being_served_locally():
+    """The published page must never probe for an API.
+
+    Without the hostname gate, every visitor to github.io would fire a request
+    at a path that does not exist there. It would fail silently, which is how
+    the v1 page looked fine to its author and broken to everyone else.
+    """
+    code = strip_comments(site_code())
+    assert "LOCAL_HOSTS" in code, "the hostname gate is gone"
+    assert "location.hostname" in code
+    gate = re.search(r"LOCAL_HOSTS\s*=\s*\[([^\]]*)\]", code)
+    assert gate, "LOCAL_HOSTS is no longer a literal list"
+    for host in ("localhost", "127.0.0.1"):
+        assert host in gate.group(1), f"{host} missing from the local-host gate"
+    # the gate must run before any live fetch
+    gate_at = code.index("LOCAL_HOSTS.includes")
+    first_api = code.index('fetch("api/')
+    assert gate_at < first_api, "a live fetch is issued before the hostname check"
 
 
 def test_the_page_states_the_scope():
